@@ -197,7 +197,8 @@ export class program {
 
   program() = default;
 
-  explicit program(const_span source) {
+  explicit program(const_span source, bool debug = false)
+      : debug_(debug) {
     for (value_type i = 0, n = source.size(); i < n; i++) {
       memory_[i] = source[i];
     }
@@ -247,7 +248,7 @@ export class program {
           case mode::relative: memory_[relative_base_ + x] = value; return;
         }
       };
-      std::cerr << memory_.decode(pc_) << '\n';
+      if (debug_) std::cerr << memory_.decode(pc_) << '\n';
       switch (op.code) {
         case opcode::illegal:
           std::cerr << "illegal instruction " << memory_[pc_]
@@ -326,6 +327,7 @@ export class program {
   }
 
  private:
+  const bool debug_ = false;
   state state_ = ready;
   value_type pc_ = 0, input_address_ = 0, output_ = 0, relative_base_ = 0;
   memory memory_;

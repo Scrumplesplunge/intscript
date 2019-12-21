@@ -1,0 +1,4 @@
+module check {
+  header "check.h"
+  export *
+}

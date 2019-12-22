@@ -4,7 +4,7 @@ module;
 
 export module intcode;
 
-import "util/check.h";
+import "../util/check.h";
 import util.io;
 import <array>;
 import <charconv>;  // bug

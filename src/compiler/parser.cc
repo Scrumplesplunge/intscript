@@ -45,11 +45,8 @@ struct parser {
   }
 
   bool consume_name(std::string_view value) {
-    auto first = source.data(), last = first + source.size();
-    auto i = std::find_if_not(
-        first, last, [](char c) { return std::isalnum(c); });
-    std::string_view word(first, i - first);
-    if (word == value) {
+    auto name = peek_name();
+    if (name == value) {
       advance(value.size());
       return true;
     } else {
@@ -58,6 +55,34 @@ struct parser {
   }
 
   void eat_name(std::string_view value) {
+    if (!consume_name(value)) {
+      std::ostringstream message;
+      message << "Expected " << std::quoted(value) << ".";
+      die(message.str());
+    }
+  }
+
+  std::string_view peek_symbol() {
+    skip_whitespace();
+    auto first = source.data(), last = first + source.size();
+    auto i = std::find_if_not(first, last, [](char c) {
+      constexpr std::string_view symbol_chars = "+-=<>!";
+      return symbol_chars.find(c) != symbol_chars.npos;
+    });
+    return std::string_view(first, i - first);
+  }
+
+  bool consume_symbol(std::string_view value) {
+    auto name = peek_symbol();
+    if (name == value) {
+      advance(value.size());
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  void eat_symbol(std::string_view value) {
     if (!consume_name(value)) {
       std::ostringstream message;
       message << "Expected " << std::quoted(value) << ".";
@@ -172,46 +197,58 @@ struct parser {
     return expression::wrap(name);
   }
 
-  expression parse_call() {
-    expression callee = parse_term();
-    skip_whitespace();
-    while (!source.empty() && source[0] == '(') {
-      eat("(");
+  expression parse_suffix() {
+    expression result = parse_term();
+    while (true) {
       skip_whitespace();
-      if (peek() == ')') {
-        eat(")");
-        callee = expression::wrap(call{std::move(callee), {}});
-      } else {
-        std::vector<expression> arguments = {parse_expression()};
-        skip_whitespace();
-        while (peek() != ')') {
-          eat(",");
-          arguments.push_back(parse_expression());
+      if (source.empty()) break;
+      if (source[0] == '[') {
+        // Array index.
+        eat("[");
+        auto address = parse_expression();
+        eat("]");
+        result = expression::wrap(read{expression::wrap(add{{
+            std::move(result), std::move(address)}})});
+      } else if (source[0] == '(') {
+        // Function call.
+        eat("(");
+        if (peek() == ')') {
+          eat(")");
+          result = expression::wrap(call{std::move(result), {}});
+        } else {
+          std::vector<expression> arguments = {parse_expression()};
+          skip_whitespace();
+          while (peek() != ')') {
+            eat(",");
+            arguments.push_back(parse_expression());
+          }
+          eat(")");
+          result = expression::wrap(
+              call{std::move(result), std::move(arguments)});
         }
-        eat(")");
-        callee = expression::wrap(
-            call{std::move(callee), std::move(arguments)});
+      } else {
+        break;
       }
     }
-    return callee;
+    return result;
   }
 
-  expression parse_read() {
+  expression parse_prefix() {
     skip_whitespace();
     if (source.empty()) die("Unexpected end of input.");
     if (source[0] == '*') {
       eat("*");
-      return expression::wrap(read{parse_read()});
+      return expression::wrap(read{parse_prefix()});
     } else {
-      return parse_call();
+      return parse_suffix();
     }
   }
 
   expression parse_product() {
-    expression result = parse_read();
+    expression result = parse_prefix();
     while (peek() == '*') {
       eat("*");
-      result = expression::wrap(mul{{std::move(result), parse_call()}});
+      result = expression::wrap(mul{{std::move(result), parse_prefix()}});
     }
     return result;
   }
@@ -238,13 +275,18 @@ struct parser {
   expression parse_condition() {
     expression left = parse_sum();
     skip_whitespace();
-    char lookahead = peek();
-    if (lookahead == '<') {
-      eat("<");
+    if (consume_symbol("<")) {
       return expression::wrap(less_than{{std::move(left), parse_expression()}});
-    } else if (lookahead == '=') {
-      eat("==");
+    } else if (consume_symbol("==")) {
       return expression::wrap(equals{{std::move(left), parse_expression()}});
+    } else if (consume_symbol(">")) {
+      return greater_than(parse_expression(), std::move(left));
+    } else if (consume_symbol("<=")) {
+      return less_or_equal(std::move(left), parse_expression());
+    } else if (consume_symbol(">=")) {
+      return greater_or_equal(parse_expression(), std::move(left));
+    } else if (consume_symbol("!=")) {
+      return not_equals(std::move(left), parse_expression());
     } else {
       return left;
     }

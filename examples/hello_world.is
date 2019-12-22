@@ -1,6 +1,6 @@
 const message = "Hello, World!\n";
 var i = 0;
-while i < 14 {
-  output *(message + i);
+while i != 14 {
+  output message[i];
   i = i + 1;
 }

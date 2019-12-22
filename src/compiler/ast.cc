@@ -23,6 +23,7 @@ export struct mul;
 export struct less_than;
 export struct equals;
 export struct input;
+export struct base;
 export struct read;
 export struct expression {
   using type = std::variant<literal, name, call, add, sub, mul, less_than,
@@ -44,7 +45,28 @@ export struct mul : calculation {};
 export struct less_than : calculation {};
 export struct equals : calculation {};
 export struct input {};
+export struct base {};
 export struct read { expression address; };
+
+export expression logical_not(expression x) {
+  return expression::wrap(equals{{std::move(x), expression::wrap(literal{0})}});
+}
+
+export expression greater_than(expression l, expression r) {
+  return expression::wrap(less_than{{std::move(r), std::move(l)}});
+}
+
+export expression less_or_equal(expression l, expression r) {
+  return logical_not(greater_than(std::move(l), std::move(r)));
+}
+
+export expression greater_or_equal(expression l, expression r) {
+  return logical_not(expression::wrap(less_than{{std::move(l), std::move(r)}}));
+}
+
+export expression not_equals(expression l, expression r) {
+  return logical_not(expression::wrap(equals{{std::move(l), std::move(r)}}));
+}
 
 export bool is_lvalue(const expression& e) {
   return std::visit(overload{

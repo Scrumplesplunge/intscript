@@ -292,18 +292,26 @@ struct parser {
     }
   }
 
-  std::vector<statement> parse_declaration() {
+  enum declare_mode {
+    declare_only,
+    declare_assign,
+  };
+
+  template <typename Output, declare_mode mode>
+  std::vector<Output> parse_var() {
     eat_name("var");
-    std::vector<statement> output;
+    std::vector<Output> output;
     while (true) {
       auto [id] = parse_name();
       skip_whitespace();
-      output.push_back(statement::wrap(declare{id}));
-      if (peek() == '=') {
-        eat("=");
-        output.push_back(statement::wrap(
-            assign{expression::wrap(name{id}), parse_expression()}));
-        skip_whitespace();
+      output.push_back(Output::wrap(declare{id}));
+      if constexpr (mode == declare_assign) {
+        if (peek() == '=') {
+          eat("=");
+          output.push_back(Output::wrap(
+              assign{expression::wrap(name{id}), parse_expression()}));
+          skip_whitespace();
+        }
       }
       if (peek() != ',') break;
       eat(",");
@@ -312,14 +320,15 @@ struct parser {
     return output;
   }
 
-  std::vector<statement> parse_constant() {
+  template <typename Output>
+  std::vector<Output> parse_constant() {
     eat_name("const");
-    std::vector<statement> output;
+    std::vector<Output> output;
     while (true) {
       auto [id] = parse_name();
       eat("=");
       output.push_back(
-          statement::wrap(constant{std::move(id), parse_expression()}));
+          Output::wrap(constant{std::move(id), parse_expression()}));
       skip_whitespace();
       if (peek() != ',') break;
       eat(",");
@@ -392,11 +401,11 @@ struct parser {
       if (std::isalpha(source[0])) {
         auto word = peek_name();
         if (word == "const") {
-          auto x = parse_constant();
+          auto x = parse_constant<statement>();
           std::move(x.begin(), x.end(), std::back_inserter(output));
           return;
         } else if (word == "var") {
-          auto x = parse_declaration();
+          auto x = parse_var<statement, declare_assign>();
           std::move(x.begin(), x.end(), std::back_inserter(output));
           return;
         } else if (word == "if") {
@@ -446,9 +455,57 @@ struct parser {
     }
     return output;
   }
+
+  function_definition parse_function_definition() {
+    eat_name("function");
+    auto [name] = parse_name();
+    eat("(");
+    std::vector<std::string> arguments;
+    while (true) {
+      skip_whitespace();
+      if (peek() == ')') break;
+      auto [argument] = parse_name();
+      arguments.push_back(std::move(argument));
+      skip_whitespace();
+      if (peek() != ',') break;
+      eat(",");
+    }
+    eat(")");
+    eat("{");
+    parse_newline();
+    auto body = parse_statements();
+    eat("}");
+    return {std::move(name), std::move(arguments), std::move(body)};
+  }
+
+  std::vector<declaration> parse_program() {
+    std::vector<declaration> output;
+    while (true) {
+      skip_whitespace();
+      if (source.empty()) break;
+      if (source[0] == '\n') {
+        parse_newline();
+        continue;
+      }
+      auto name = peek_name();
+      if (name == "const") {
+        auto x = parse_constant<declaration>();
+        std::move(x.begin(), x.end(), std::back_inserter(output));
+      } else if (name == "var") {
+        auto x = parse_var<declaration, declare_only>();
+        std::move(x.begin(), x.end(), std::back_inserter(output));
+      } else if (name == "function") {
+        output.push_back(declaration::wrap(parse_function_definition()));
+      } else {
+        die("Expected declaration.");
+      }
+      parse_newline();
+    }
+    return output;
+  }
 };
 
-export std::vector<statement> parse(
+export std::vector<declaration> parse(
     std::string_view file, std::string_view source) {
-  return parser{file, source}.parse_statements();
+  return parser{file, source}.parse_program();
 }

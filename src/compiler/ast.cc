@@ -116,6 +116,21 @@ export struct return_statement { expression value; };
 export struct break_statement {};
 export struct continue_statement {};
 
+export struct function_definition {
+  std::string name;
+  std::vector<std::string> parameters;
+  std::vector<statement> body;
+};
+export struct declaration {
+  using type = std::variant<constant, declare, function_definition>;
+  value_ptr<type> value;
+
+  template <typename T>
+  static declaration wrap(T&& value) {
+    return declaration{make_value<type>(std::forward<T>(value))};
+  }
+};
+
 export std::ostream& operator<<(std::ostream&, const expression&);
 
 export std::ostream& operator<<(std::ostream& output, literal l) {
@@ -311,4 +326,40 @@ export std::ostream& operator<<(
 export std::ostream& operator<<(
     std::ostream& output, std::span<const statement> statements) {
   return print(output, statements, 0);
+}
+
+export std::ostream& print(
+    std::ostream& output, const function_definition& f, int indent) {
+  output << "function " << f.name << "(";
+  bool first = true;
+  for (const auto& parameter : f.parameters) {
+    if (first) {
+      first = false;
+    } else {
+      output << ", ";
+    }
+    output << parameter;
+  }
+  output << ") {";
+  if (f.parameters.empty()) return output << "}";
+  output << "\n" << std::string(indent + 2, ' ');
+  print(output, f.body, indent + 2);
+  output << "\n" << std::string(indent, ' ') << '}';
+  return output;
+}
+
+export std::ostream& operator<<(
+    std::ostream& output, const function_definition& f) {
+  return print(output, f, 0);
+}
+
+export std::ostream& print(
+    std::ostream& output, const declaration& d, int indent) {
+  std::visit([&](const auto& x) { print(output, x, indent); }, *d.value);
+  return output;
+}
+
+export std::ostream& operator<<(
+    std::ostream& output, const declaration& d) {
+  return print(output, d, 0);
 }

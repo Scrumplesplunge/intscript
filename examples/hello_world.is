@@ -1,9 +1,12 @@
 const message = "Hello, World!\n";
 
-function main() {
-  var i = 0;
-  while i != 14 {
-    output message[i];
-    i = i + 1;
+function print(string) {
+  while (*string) {
+    output *string;
+    string = string + 1;
   }
+}
+
+function main() {
+  print("Hello, World!\n");
 }

@@ -169,7 +169,7 @@ struct environment {
           std::visit(overload{
             [&](const define& d) { set(macros, d.name, d.value); },
             [&](const integer&) { offset++; },
-            [&](const ascii& a) { offset += a.value.size(); },
+            [&](const ascii& a) { offset += a.value.size() + 1; },
           }, d);
         },
       }, statement);
@@ -240,7 +240,7 @@ export std::vector<std::int64_t> encode(std::span<const statement> input) {
             output.push_back(immediate_value(x.value));
           },
           [&](const ascii& a) {
-            std::copy(a.value.begin(), a.value.end(),
+            std::copy(a.value.begin(), a.value.end() + 1,
                       std::back_inserter(output));
           },
         }, d);

@@ -80,12 +80,14 @@ void read_options(int& argc, char**& argv) {
 }
 
 int main(int argc, char* argv[]) {
-  if (argc != 2) {
+  read_options(argc, argv);
+  if (args.positional.size() != 2) {
     std::cerr << "Usage: run <filename>\n";
     return 1;
   }
   program::buffer buffer;
-  program program(program::load(init(argc, argv), buffer), args.debug);
+  program program(program::load(init(args.positional.size(), argv), buffer),
+                  args.debug);
   while (!program.done()) {
     switch (program.resume()) {
       case program::ready:

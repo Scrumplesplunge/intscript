@@ -250,7 +250,7 @@ export class program {
           case mode::relative: memory_[relative_base_ + x] = value; return;
         }
       };
-      if (debug_) std::cerr << memory_.decode(pc_) << '\n';
+      if (debug_) std::cerr << pc_ << ":\t" << memory_.decode(pc_) << '\n';
       switch (op.code) {
         case opcode::illegal:
           std::cerr << "illegal instruction " << memory_[pc_]

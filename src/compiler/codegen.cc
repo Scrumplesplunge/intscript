@@ -106,7 +106,7 @@ struct function_context {
   }
 
   int get_local_variable(std::string name) const {
-    assert(lookup(name) == local_variable);
+    assert(lookup(name) == local_variable || lookup(name) == argument);
     if (auto j = arguments.find(name); j != arguments.end()) return j->second;
     for (int i = scope.size() - 1; i >= 0; i--) {
       if (auto j = scope[i].variables.find(name);
@@ -219,6 +219,7 @@ void context::gen_decl(const function_definition& d) {
   text.push_back(as::label{d.name});
   f.gen_stmts(d.body);
   f.gen_stmt(return_statement{expression::wrap(literal{0})});
+  constants.emplace(d.name, as::name{d.name});
 }
 
 void context::gen_decl(const declaration& d) {

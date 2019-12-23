@@ -99,7 +99,7 @@ auto load_input() {
     }
     source.assign(std::istreambuf_iterator<char>(file), {});
   }
-  return parse(file, source);
+  return as::parse(file, source);
 };
 
 int main(int argc, char* argv[]) {

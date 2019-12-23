@@ -14,6 +14,8 @@ import <variant>;
 import <vector>;
 import as.ast;
 
+namespace as {
+
 struct parser {
   std::string_view file, source;
   int line = 1, column = 1;
@@ -85,8 +87,8 @@ struct parser {
   immediate parse_immediate() {
     skip_whitespace();
     if (source.empty()) die("Unexpected end of input.");
-    return std::isdigit(source[0]) ? immediate{parse_literal()}
-                                   : immediate{parse_name()};
+    return std::isalpha(source[0]) ? immediate{parse_name()}
+                                   : immediate{parse_literal()};
   }
 
   address parse_address() {
@@ -266,3 +268,5 @@ export std::vector<statement> parse(
     std::string_view file, std::string_view source) {
   return parser{file, source}.parse_program();
 }
+
+}  // namespace as

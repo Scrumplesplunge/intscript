@@ -123,50 +123,52 @@ class memory {
     return chunks_.at(index / chunk_size)[index % chunk_size];
   }
 
-  static input_param decode_input(mode m, std::int64_t arg) {
+  static as::input_param decode_input(mode m, std::int64_t arg) {
     switch (m) {
-      case mode::position: return {{}, address{literal{arg}}};
-      case mode::immediate: return {{}, immediate{literal{arg}}};
-      case mode::relative: return {{}, relative{literal{arg}}};
+      case mode::position: return {{}, as::address{as::literal{arg}}};
+      case mode::immediate: return {{}, as::immediate{as::literal{arg}}};
+      case mode::relative: return {{}, as::relative{as::literal{arg}}};
     }
   }
 
-  static output_param decode_output(mode m, std::int64_t arg) {
+  static as::output_param decode_output(mode m, std::int64_t arg) {
     switch (m) {
-      case mode::position: return {{}, address{literal{arg}}};
+      case mode::position: return {{}, as::address{as::literal{arg}}};
       case mode::immediate: return {};
-      case mode::relative: return {{}, relative{literal{arg}}};
+      case mode::relative: return {{}, as::relative{as::literal{arg}}};
     }
   }
 
-  calculation decode_calculation(std::int64_t pc, mode a, mode b, mode c) {
+  as::calculation decode_calculation(std::int64_t pc, mode a, mode b, mode c) {
     return {decode_input(a, (*this)[pc + 1]), decode_input(b, (*this)[pc + 2]),
             decode_output(c, (*this)[pc + 3])};
   }
 
-  jump decode_jump(std::int64_t pc, mode condition, mode target) {
+  as::jump decode_jump(std::int64_t pc, mode condition, mode target) {
     return {decode_input(condition, (*this)[pc + 1]),
             decode_input(target, (*this)[pc + 2])};
   }
 
-  instruction decode(std::int64_t pc) {
+  as::instruction decode(std::int64_t pc) {
     auto op = opcode((*this)[pc] % 100);
     auto a = mode((*this)[pc] / 100 % 10);
     auto b = mode((*this)[pc] / 1000 % 10);
     auto c = mode((*this)[pc] / 10000 % 10);
     switch (op) {
-      case opcode::add: return add{decode_calculation(pc, a, b, c)};
-      case opcode::mul: return mul{decode_calculation(pc, a, b, c)};
-      case opcode::input: return input{decode_output(a, (*this)[pc + 1])};
-      case opcode::output: return output{decode_input(a, (*this)[pc + 1])};
-      case opcode::jump_if_true: return jump_if_true{decode_jump(pc, a, b)};
-      case opcode::jump_if_false: return jump_if_false{decode_jump(pc, a, b)};
-      case opcode::less_than: return less_than{decode_calculation(pc, a, b, c)};
-      case opcode::equals: return equals{decode_calculation(pc, a, b, c)};
+      case opcode::add: return as::add{decode_calculation(pc, a, b, c)};
+      case opcode::mul: return as::mul{decode_calculation(pc, a, b, c)};
+      case opcode::input: return as::input{decode_output(a, (*this)[pc + 1])};
+      case opcode::output: return as::output{decode_input(a, (*this)[pc + 1])};
+      case opcode::jump_if_true: return as::jump_if_true{decode_jump(pc, a, b)};
+      case opcode::jump_if_false:
+        return as::jump_if_false{decode_jump(pc, a, b)};
+      case opcode::less_than:
+        return as::less_than{decode_calculation(pc, a, b, c)};
+      case opcode::equals: return as::equals{decode_calculation(pc, a, b, c)};
       case opcode::adjust_relative_base:
-        return adjust_relative_base{decode_input(a, (*this)[pc + 1])};
-      case opcode::halt: return halt{};
-      default: return literal{(*this)[pc]};
+        return as::adjust_relative_base{decode_input(a, (*this)[pc + 1])};
+      case opcode::halt: return as::halt{};
+      default: return as::literal{(*this)[pc]};
     }
   }
 

@@ -9,6 +9,8 @@ import <vector>;
 import <string_view>;
 import util.value_ptr;
 
+namespace compiler {
+
 template <typename... Ts>
 struct overload : Ts... { using Ts::operator()...; };
 template <typename... Ts>
@@ -23,7 +25,6 @@ export struct mul;
 export struct less_than;
 export struct equals;
 export struct input;
-export struct base;
 export struct read;
 export struct expression {
   using type = std::variant<literal, name, call, add, sub, mul, less_than,
@@ -45,7 +46,6 @@ export struct mul : calculation {};
 export struct less_than : calculation {};
 export struct equals : calculation {};
 export struct input {};
-export struct base {};
 export struct read { expression address; };
 
 export expression logical_not(expression x) {
@@ -363,3 +363,5 @@ export std::ostream& operator<<(
     std::ostream& output, const declaration& d) {
   return print(output, d, 0);
 }
+
+}  // namespace compiler

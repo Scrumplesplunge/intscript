@@ -8,6 +8,8 @@ import <variant>;
 import <vector>;
 import as.ast;
 
+namespace as {
+
 template <typename... Ts>
 struct overload : Ts... { using Ts::operator()...; };
 template <typename... Ts>
@@ -247,3 +249,5 @@ export std::vector<std::int64_t> encode(std::span<const statement> input) {
   }
   return output;
 }
+
+}  // namespace as

@@ -6,7 +6,9 @@ import <vector>;
 import <iomanip>;
 import <iostream>;
 import <span>;
+import as.ast;
 import compiler.ast;
+import compiler.codegen;
 import compiler.parser;
 
 template <typename... Ts> struct overload : Ts... { using Ts::operator()...; };
@@ -97,11 +99,12 @@ auto load_input() {
     }
     source.assign(std::istreambuf_iterator<char>(file), {});
   }
-  return parse(file, source);
+  return compiler::parse(file, source);
 };
 
 int main(int argc, char* argv[]) {
   read_options(argc, argv);
   auto code = load_input();
-  for (auto& x : code) std::cout << x << '\n';
+  auto output = compiler::generate(code);
+  for (auto& x : output) std::cout << x << '\n';
 }

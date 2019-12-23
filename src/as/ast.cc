@@ -8,18 +8,33 @@ import <string>;
 import <string_view>;
 import <variant>;
 
+namespace as {
+
 export struct literal { std::int64_t value; };
 export struct name { std::string value; };
 export using immediate = std::variant<literal, name>;
 export struct address { immediate value; };
 export struct relative { immediate value; };
-export struct input_param {
-  std::optional<std::string> label;
-  std::variant<address, immediate, relative> input;
-};
 export struct output_param {
   std::optional<std::string> label;
   std::variant<address, relative> output;
+};
+export struct input_param {
+  using type = std::variant<address, immediate, relative>;
+  std::optional<std::string> label;
+  type input;
+
+  input_param() = default;
+  input_param(std::optional<std::string> label, type input)
+      : label(std::move(label)), input(std::move(input)) {}
+  input_param(const output_param& o)
+      : label(o.label),
+        input(std::visit([](auto&& x) { return type{x}; }, o.output)) {}
+  input_param(output_param&& o)
+      : label(std::move(o.label)),
+        input(std::visit([](auto&& x) {
+                return type{std::move(x)};
+              }, o.output)) {}
 };
 export struct calculation { input_param a, b; output_param out; };
 export struct add : calculation {};
@@ -160,3 +175,5 @@ export std::ostream& operator<<(std::ostream& output, const statement& s) {
   }, s);
   return output;
 }
+
+}  // namespace as

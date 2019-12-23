@@ -16,6 +16,8 @@ import <vector>;
 import compiler.ast;
 import util.value_ptr;
 
+namespace compiler {
+
 struct parser {
   std::string_view file, source;
   int line = 1, column = 1;
@@ -509,3 +511,5 @@ export std::vector<declaration> parse(
     std::string_view file, std::string_view source) {
   return parser{file, source}.parse_program();
 }
+
+}  // namespace compiler

@@ -7,6 +7,7 @@ import <iomanip>;
 import <iostream>;
 import <span>;
 import as.ast;
+import as.encode;
 import compiler.ast;
 import compiler.codegen;
 import compiler.parser;
@@ -27,6 +28,7 @@ struct flag {
 struct {
   const char* input;
   const char* output;
+  enum { assembly, intcode } output_type;
   std::span<char*> positional;
 } args;
 
@@ -36,6 +38,17 @@ constexpr flag flags[] = {
   {"help", {}, "Displays the usage information.", show_usage_and_exit},
   {"input", "-", "File to read from.", +[](const char* x) { args.input = x; }},
   {"output", "-", "File to write to.", +[](const char* x) { args.output = x; }},
+  {"output_type", "intcode", "Output format (assembly or intcode).",
+   +[](const char* x) {
+     if (x == std::string_view("assembly")) {
+       args.output_type = args.assembly;
+     } else if (x == std::string_view("intcode")) {
+       args.output_type = args.intcode;
+     } else {
+       std::cerr << "Invalid output type.\n";
+       std::exit(1);
+     }
+   }},
 };
 
 void show_usage_and_exit() {
@@ -105,6 +118,33 @@ auto load_input() {
 int main(int argc, char* argv[]) {
   read_options(argc, argv);
   auto code = load_input();
-  auto output = compiler::generate(code);
-  for (auto& x : output) std::cout << x << '\n';
+  auto compiled = compiler::generate(code);
+  std::ofstream file;
+  std::ostream* output;
+  if (args.output == std::string_view("-")) {
+    output = &std::cout;
+  } else {
+    file.open(args.output);
+    if (!file.good()) {
+      std::cerr << "Could not open " << std::quoted(args.output)
+                << " for writing.\n";
+      return 1;
+    }
+    output = &file;
+  }
+  if (args.output_type == args.assembly) {
+    for (auto& x : compiled) *output << x << '\n';
+  } else {
+    auto encoded = encode(compiled);
+    bool first = true;
+    for (auto x : encoded) {
+      if (first) {
+        first = false;
+      } else {
+        *output << ',';
+      }
+      *output << x;
+    }
+    *output << '\n';
+  }
 }

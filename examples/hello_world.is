@@ -8,5 +8,5 @@ function print(string) {
 }
 
 function main() {
-  print("Hello, World!\n");
+  print(message);
 }

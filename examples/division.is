@@ -2,16 +2,76 @@ import util.div;
 import util.io;
 
 function main() {
-  if div2(64) == 32 {
+  var temp = div2(64);
+  if temp == 32 {
     puts("div2 is fine\n");
   } else {
     puts("div2 is broken\n");
-    output div2(64);
+    puti(temp);
+    puts("\n");
   }
-  if div(72, 5) == 14 {
-    puts("div (positive) is fine\n");
+  temp = div(72, 5);
+  if temp == 14 {
+    puts("div (positive-positive) is fine\n");
   } else {
-    puts("div (positive) is broken\n");
-    output div(72, 5);
+    puts("div (positive-positive) is broken\n");
+    puti(temp);
+    puts("\n");
+  }
+  temp = div(-72, 5);
+  if temp == -14 {
+    puts("div (negative-positive) is fine\n");
+  } else {
+    puts("div (negative-positive) is broken\n");
+    puti(temp);
+    puts("\n");
+  }
+  temp = div(-72, -5);
+  if temp == 14 {
+    puts("div (negative-negative) is fine\n");
+  } else {
+    puts("div (negative-negative) is broken\n");
+    puti(temp);
+    puts("\n");
+  }
+  temp = div(72, -5);
+  if temp == -14 {
+    puts("div (positive-negative) is fine\n");
+  } else {
+    puts("div (positive-negative) is broken\n");
+    puti(temp);
+    puts("\n");
+  }
+  temp = mod(72, 5);
+  if temp == 2 {
+    puts("mod (positive-positive) is fine\n");
+  } else {
+    puts("mod (positive-positive) is broken\n");
+    puti(temp);
+    puts("\n");
+  }
+  temp = mod(-72, 5);
+  if temp == -2 {
+    puts("mod (negative-positive) is fine\n");
+  } else {
+    puts("mod (negative-positive) is broken\n");
+    puti(temp);
+    puts("\n");
+  }
+  temp = mod(-72, -5);
+  if temp == -2 {
+    puts("mod (negative-negative) is fine\n");
+  } else {
+    puts("mod (negative-negative) is broken\n");
+    puti(temp);
+    puts("\n");
+  }
+  temp = mod(72, -5);
+  if temp == 2 {
+    puts("mod (positive-negative) is fine\n");
+  } else {
+    puts("mod (positive-negative) is broken\n");
+    puti(temp);
+    puts("\n");
   }
 }

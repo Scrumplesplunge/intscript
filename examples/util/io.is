@@ -1,6 +1,21 @@
+import div;
+
 function puts(string) {
   while (*string) {
     output *string;
     string = string + 1;
   }
+}
+
+function puti(x) {
+  if x < 0 {
+    puts("-");
+    x = -x;
+  }
+  puts("reversed[");
+  while x {
+    output "0"[0] + pmod(x, 10);
+    x = pdiv(x, 10);
+  }
+  puts("]");
 }

@@ -191,6 +191,8 @@ struct function_context {
   as::input_param gen_expr(const equals& e);
   as::input_param gen_expr(const input&);
   as::input_param gen_expr(const read& r);
+  as::input_param gen_expr(const logical_and& a);
+  as::input_param gen_expr(const logical_or& o);
   as::input_param gen_expr(const expression& e);
   as::immediate eval_expr(const expression& e);
 
@@ -298,43 +300,43 @@ as::immediate module_context::eval_expr(const expression& e) {
     },
     [&](const name& n) -> as::immediate { return constants.at(n.value); },
     [&](const add& a) -> as::immediate {
-      auto l = eval_expr(a.a);
-      auto r = eval_expr(a.b);
+      auto l = eval_expr(a.left);
+      auto r = eval_expr(a.right);
       auto* x = std::get_if<as::literal>(&l);
       auto* y = std::get_if<as::literal>(&r);
       if (x && y) {
         return as::literal{x->value + y->value};
       } else {
         std::ostringstream message;
-        message << "Cannot add " << a.a << " and " << a.b
+        message << "Cannot add " << a.left << " and " << a.right
                 << " in a constant expression.";
         die(message.str());
       }
     },
     [&](const sub& s) -> as::immediate {
-      auto l = eval_expr(s.a);
-      auto r = eval_expr(s.b);
+      auto l = eval_expr(s.left);
+      auto r = eval_expr(s.right);
       auto* x = std::get_if<as::literal>(&l);
       auto* y = std::get_if<as::literal>(&r);
       if (x && y) {
         return as::literal{x->value - y->value};
       } else {
         std::ostringstream message;
-        message << "Cannot subtract " << s.a << " from " << s.b
+        message << "Cannot subtract " << s.left << " from " << s.right
                 << " in a constant expression.";
         die(message.str());
       }
     },
     [&](const mul& m) -> as::immediate {
-      auto l = eval_expr(m.a);
-      auto r = eval_expr(m.b);
+      auto l = eval_expr(m.left);
+      auto r = eval_expr(m.right);
       auto* x = std::get_if<as::literal>(&l);
       auto* y = std::get_if<as::literal>(&r);
       if (x && y) {
         return as::literal{x->value * y->value};
       } else {
         std::ostringstream message;
-        message << "Cannot multiply " << m.a << " and " << m.b
+        message << "Cannot multiply " << m.left << " and " << m.right
                 << " in a constant expression.";
         die(message.str());
       }
@@ -473,8 +475,8 @@ as::input_param function_context::gen_expr(const call& c) {
 }
 
 as::input_param function_context::gen_expr(const add& a) {
-  auto l = gen_expr(a.a);
-  auto r = gen_expr(a.b);
+  auto l = gen_expr(a.left);
+  auto r = gen_expr(a.right);
   auto result = module->context->label("add");
   module->context->text.push_back(
       as::instruction{as::add{{l, r, {{}, as::address{as::name{result}}}}}});
@@ -482,8 +484,8 @@ as::input_param function_context::gen_expr(const add& a) {
 }
 
 as::input_param function_context::gen_expr(const mul& m) {
-  auto l = gen_expr(m.a);
-  auto r = gen_expr(m.b);
+  auto l = gen_expr(m.left);
+  auto r = gen_expr(m.right);
   auto result = module->context->label("mul");
   module->context->text.push_back(
       as::instruction{as::mul{{l, r, {{}, as::address{as::name{result}}}}}});
@@ -492,13 +494,13 @@ as::input_param function_context::gen_expr(const mul& m) {
 
 as::input_param function_context::gen_expr(const sub& s) {
   const auto negated_b =
-      expression::wrap(mul{{s.b, expression::wrap(literal{-1})}});
-  return gen_expr(add{{s.a, negated_b}});
+      expression::wrap(mul{{s.right, expression::wrap(literal{-1})}});
+  return gen_expr(add{{s.left, negated_b}});
 }
 
 as::input_param function_context::gen_expr(const less_than& l) {
-  auto a = gen_expr(l.a);
-  auto b = gen_expr(l.b);
+  auto a = gen_expr(l.left);
+  auto b = gen_expr(l.right);
   auto result = module->context->label("lt");
   module->context->text.push_back(as::instruction{
       as::less_than{{a, b, {{}, as::address{as::name{result}}}}}});
@@ -506,8 +508,8 @@ as::input_param function_context::gen_expr(const less_than& l) {
 }
 
 as::input_param function_context::gen_expr(const equals& e) {
-  auto a = gen_expr(e.a);
-  auto b = gen_expr(e.b);
+  auto a = gen_expr(e.left);
+  auto b = gen_expr(e.right);
   auto result = module->context->label("eq");
   module->context->text.push_back(as::instruction{
       as::equals{{a, b, {{}, as::address{as::name{result}}}}}});
@@ -523,7 +525,51 @@ as::input_param function_context::gen_expr(const input&) {
 
 as::input_param function_context::gen_expr(const read& r) {
   return gen_addr(r);
-};
+}
+
+as::input_param function_context::gen_expr(const logical_and& a) {
+  auto result = module->context->label("and");
+  auto short_circuit = module->context->label("andfalse");
+  auto end = module->context->label("andend");
+  // Initialize the output to true.
+  const auto zero = as::input_param{{}, as::literal{0}};
+  const auto one = as::input_param{{}, as::literal{1}};
+  module->context->text.push_back(
+      as::add{{zero, one, {{}, as::address{as::name{result}}}}});
+  auto l = gen_expr(a.left);
+  module->context->text.push_back(as::instruction{
+      as::jump_if_false{{l, {{}, as::immediate{as::name{short_circuit}}}}}});
+  auto r = gen_expr(a.right);
+  module->context->text.push_back(as::instruction{
+      as::jump_if_true{{r, {{}, as::immediate{as::name{end}}}}}});
+  module->context->text.push_back(as::label{short_circuit});
+  module->context->text.push_back(
+      as::add{{zero, zero, {{}, as::address{as::name{result}}}}});
+  module->context->text.push_back(as::label{end});
+  return {{result}, as::immediate{as::literal{0}}};
+}
+
+as::input_param function_context::gen_expr(const logical_or& o) {
+  auto result = module->context->label("or");
+  auto short_circuit = module->context->label("ortrue");
+  auto end = module->context->label("orend");
+  // Initialize the output to false.
+  const auto zero = as::input_param{{}, as::literal{0}};
+  const auto one = as::input_param{{}, as::literal{1}};
+  module->context->text.push_back(
+      as::add{{zero, zero, {{}, as::address{as::name{result}}}}});
+  auto l = gen_expr(o.left);
+  module->context->text.push_back(as::instruction{
+      as::jump_if_true{{l, {{}, as::immediate{as::name{short_circuit}}}}}});
+  auto r = gen_expr(o.right);
+  module->context->text.push_back(as::instruction{
+      as::jump_if_false{{r, {{}, as::immediate{as::name{end}}}}}});
+  module->context->text.push_back(as::label{short_circuit});
+  module->context->text.push_back(
+      as::add{{zero, one, {{}, as::address{as::name{result}}}}});
+  module->context->text.push_back(as::label{end});
+  return {{result}, as::immediate{as::literal{0}}};
+}
 
 as::input_param function_context::gen_expr(const expression& e) {
   return std::visit([&](auto& x) { return gen_expr(x); }, *e.value);
@@ -541,43 +587,43 @@ as::immediate function_context::eval_expr(const expression& e) {
     },
     [&](const name& n) -> as::immediate { return get_constant(n.value); },
     [&](const add& a) -> as::immediate {
-      auto l = eval_expr(a.a);
-      auto r = eval_expr(a.b);
+      auto l = eval_expr(a.left);
+      auto r = eval_expr(a.right);
       auto* x = std::get_if<as::literal>(&l);
       auto* y = std::get_if<as::literal>(&r);
       if (x && y) {
         return as::literal{x->value + y->value};
       } else {
         std::ostringstream message;
-        message << "Cannot add " << a.a << " and " << a.b
+        message << "Cannot add " << a.left << " and " << a.right
                 << " in a constant expression.";
         die(message.str());
       }
     },
     [&](const sub& s) -> as::immediate {
-      auto l = eval_expr(s.a);
-      auto r = eval_expr(s.b);
+      auto l = eval_expr(s.left);
+      auto r = eval_expr(s.right);
       auto* x = std::get_if<as::literal>(&l);
       auto* y = std::get_if<as::literal>(&r);
       if (x && y) {
         return as::literal{x->value - y->value};
       } else {
         std::ostringstream message;
-        message << "Cannot subtract " << s.a << " from " << s.b
+        message << "Cannot subtract " << s.left << " from " << s.right
                 << " in a constant expression.";
         die(message.str());
       }
     },
     [&](const mul& m) -> as::immediate {
-      auto l = eval_expr(m.a);
-      auto r = eval_expr(m.b);
+      auto l = eval_expr(m.left);
+      auto r = eval_expr(m.right);
       auto* x = std::get_if<as::literal>(&l);
       auto* y = std::get_if<as::literal>(&r);
       if (x && y) {
         return as::literal{x->value * y->value};
       } else {
         std::ostringstream message;
-        message << "Cannot multiply " << m.a << " and " << m.b
+        message << "Cannot multiply " << m.left << " and " << m.right
                 << " in a constant expression.";
         die(message.str());
       }

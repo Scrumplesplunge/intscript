@@ -1,5 +1,3 @@
-import io;
-
 function div2(x) {
   var y = 0;
   if x >= 4611686018427388000 {
@@ -253,12 +251,8 @@ function div2(x) {
   return y;
 }
 
-function div(a, b) {
-  if b == 0 {
-    puts("division by zero\n");
-    halt;
-  }
-  var low = 1, high = a;
+function pdiv(a, b) {
+  var low = 0, high = a;
   while low + 1 < high {
     var mid = low + div2(high - low);
     if b * mid <= a {
@@ -268,4 +262,30 @@ function div(a, b) {
     }
   }
   return low;
+}
+
+function pmod(a, b) {
+  var quotient = pdiv(a, b);
+  return a - b * quotient;
+}
+
+function div(a, b) {
+  if a < 0 {
+    if b < 0 {
+      return pdiv(-a, -b);
+    } else {
+      return -pdiv(-a, b);
+    }
+  } else {
+    if b < 0 {
+      return -pdiv(a, -b);
+    } else {
+      return pdiv(a, b);
+    }
+  }
+}
+
+function mod(a, b) {
+  var quotient = div(a, b);
+  return a - b * quotient;
 }

@@ -71,7 +71,7 @@ struct parser {
     skip_whitespace();
     auto first = source.data(), last = first + source.size();
     auto i = std::find_if_not(first, last, [](char c) {
-      constexpr std::string_view symbol_chars = "+-=<>!.";
+      constexpr std::string_view symbol_chars = "+-=<>!.&|";
       return symbol_chars.find(c) != symbol_chars.npos;
     });
     return std::string_view(first, i - first);
@@ -244,6 +244,10 @@ struct parser {
     if (source[0] == '*') {
       eat("*");
       return expression::wrap(read{parse_prefix()});
+    } else if (source[0] == '-') {
+      eat("-");
+      return expression::wrap(
+          sub{{expression::wrap(literal{0}), parse_prefix()}});
     } else {
       return parse_suffix();
     }
@@ -277,7 +281,7 @@ struct parser {
 
   expression parse_expression() { return parse_sum(); }
 
-  expression parse_condition() {
+  expression parse_comparison() {
     expression left = parse_sum();
     skip_whitespace();
     if (consume_symbol("<")) {
@@ -285,7 +289,7 @@ struct parser {
     } else if (consume_symbol("==")) {
       return expression::wrap(equals{{std::move(left), parse_expression()}});
     } else if (consume_symbol(">")) {
-      return greater_than(parse_expression(), std::move(left));
+      return greater_than(std::move(left), parse_expression());
     } else if (consume_symbol("<=")) {
       return less_or_equal(std::move(left), parse_expression());
     } else if (consume_symbol(">=")) {
@@ -296,6 +300,26 @@ struct parser {
       return left;
     }
   }
+
+  expression parse_conjunction() {
+    expression left = parse_comparison();
+    while (consume_symbol("&&")) {
+      left = expression::wrap(
+          logical_and{{std::move(left), parse_comparison()}});
+    }
+    return left;
+  }
+
+  expression parse_disjunction() {
+    expression left = parse_conjunction();
+    while (consume_symbol("||")) {
+      left = expression::wrap(
+          logical_or{{std::move(left), parse_conjunction()}});
+    }
+    return left;
+  }
+
+  expression parse_condition() { return parse_disjunction(); }
 
   enum declare_mode {
     declare_only,
@@ -352,10 +376,14 @@ struct parser {
     skip_whitespace();
     std::vector<statement> else_branch;
     if (consume_name("else")) {
-      eat("{");
-      parse_newline();
-      else_branch = parse_statements();
-      eat("}");
+      if (peek_name() == "if") {
+        else_branch = {parse_if_statement()};
+      } else {
+        eat("{");
+        parse_newline();
+        else_branch = parse_statements();
+        eat("}");
+      }
     }
     return statement::wrap(if_statement{
         std::move(condition), std::move(then_branch), std::move(else_branch)});

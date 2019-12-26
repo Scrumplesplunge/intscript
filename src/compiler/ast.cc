@@ -28,9 +28,11 @@ export struct less_than;
 export struct equals;
 export struct input;
 export struct read;
+export struct logical_and;
+export struct logical_or;
 export struct expression {
   using type = std::variant<literal, name, call, add, sub, mul, less_than,
-                            equals, input, read>;
+                            equals, input, read, logical_and, logical_or>;
   value_ptr<type> value;
 
   template <typename T> static expression wrap(T&& value) {
@@ -41,12 +43,14 @@ export struct expression {
 
 export struct name { std::string value; };
 export struct call { expression function; std::vector<expression> arguments; };
-export struct calculation { expression a, b; };
+export struct calculation { expression left, right; };
 export struct add : calculation {};
 export struct sub : calculation {};
 export struct mul : calculation {};
 export struct less_than : calculation {};
 export struct equals : calculation {};
+export struct logical_and : calculation {};
+export struct logical_or : calculation {};
 export struct input {};
 export struct read { expression address; };
 
@@ -182,29 +186,24 @@ export std::ostream& operator<<(std::ostream& output, const call& c) {
   return output << ")";
 }
 
-std::ostream& print(std::ostream& output, std::string_view op,
-                    const calculation& c) {
-  return output << "(" << c.a << " " << op << " " << c.b << ")";
-}
-
 export std::ostream& operator<<(std::ostream& output, const add& a) {
-  return print(output, "+", a);
+  return output << "(" << a.left << " + " << a.right << ")";
 }
 
 export std::ostream& operator<<(std::ostream& output, const sub& s) {
-  return print(output, "-", s);
+  return output << "(" << s.left << " - " << s.right << ")";
 }
 
 export std::ostream& operator<<(std::ostream& output, const mul& m) {
-  return print(output, "*", m);
+  return output << "(" << m.left << " * " << m.right << ")";
 }
 
 export std::ostream& operator<<(std::ostream& output, const less_than& l) {
-  return print(output, "<", l);
+  return output << "(" << l.left << " < " << l.right << ")";
 }
 
 export std::ostream& operator<<(std::ostream& output, const equals& e) {
-  return print(output, "==", e);
+  return output << "(" << e.left << " == " << e.right << ")";
 }
 
 export std::ostream& operator<<(std::ostream& output, const input&) {
@@ -213,6 +212,14 @@ export std::ostream& operator<<(std::ostream& output, const input&) {
 
 export std::ostream& operator<<(std::ostream& output, const read& r) {
   return output << "*" << r.address;
+}
+
+export std::ostream& operator<<(std::ostream& output, const logical_and& a) {
+  return output << "(" << a.left << " && " << a.right << ")";
+}
+
+export std::ostream& operator<<(std::ostream& output, const logical_or& o) {
+  return output << "(" << o.left << " || " << o.right << ")";
 }
 
 export std::ostream& operator<<(std::ostream& output, const expression& e) {

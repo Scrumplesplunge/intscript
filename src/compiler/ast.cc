@@ -90,10 +90,12 @@ export struct output_statement;
 export struct return_statement;
 export struct break_statement;
 export struct continue_statement;
+export struct halt_statement;
 export struct statement {
   using type = std::variant<constant, call, declare, assign, if_statement,
                             while_statement, output_statement, return_statement,
-                            break_statement, continue_statement>;
+                            break_statement, continue_statement,
+                            halt_statement>;
   value_ptr<type> value;
 
   template <typename T>
@@ -117,6 +119,7 @@ export struct output_statement { expression value; };
 export struct return_statement { expression value; };
 export struct break_statement {};
 export struct continue_statement {};
+export struct halt_statement {};
 
 export struct function_definition {
   std::string name;
@@ -293,6 +296,11 @@ export std::ostream& print(std::ostream& output, const break_statement&, int) {
 export std::ostream& print(
     std::ostream& output, const continue_statement&, int) {
   return output << "continue;";
+}
+
+export std::ostream& print(
+    std::ostream& output, const halt_statement&, int) {
+  return output << "halt;";
 }
 
 export std::ostream& print(

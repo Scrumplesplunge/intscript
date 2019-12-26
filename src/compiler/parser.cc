@@ -399,6 +399,12 @@ struct parser {
     return statement::wrap(continue_statement{});
   }
 
+  statement parse_halt_statement() {
+    eat_name("halt");
+    eat(";");
+    return statement::wrap(halt_statement{});
+  }
+
   std::vector<statement> parse_statements() {
     skip_whitespace();
     std::vector<statement> output;
@@ -431,6 +437,9 @@ struct parser {
           return;
         } else if (word == "continue") {
           output.push_back(parse_continue_statement());
+          return;
+        } else if (word == "halt") {
+          output.push_back(parse_halt_statement());
           return;
         }
       }

@@ -204,6 +204,7 @@ struct function_context {
   void gen_stmt(const return_statement& r);
   void gen_stmt(const break_statement&);
   void gen_stmt(const continue_statement&);
+  void gen_stmt(const halt_statement&);
   void gen_stmt(const statement& s);
 
   void gen_stmts(std::span<const statement> statements);
@@ -717,6 +718,10 @@ void function_context::gen_stmt(const continue_statement&) {
       {}, as::immediate{as::name{*scope.back().continue_label}}};
   module->context->text.push_back(
       as::instruction{as::jump_if_false{{zero, continue_label}}});
+}
+
+void function_context::gen_stmt(const halt_statement&) {
+  module->context->text.push_back(as::instruction{as::halt{}});
 }
 
 void function_context::gen_stmt(const statement& s) {

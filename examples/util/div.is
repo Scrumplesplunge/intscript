@@ -254,6 +254,10 @@ function div2(x) {
 }
 
 function div(a, b) {
+  if b == 0 {
+    puts("division by zero\n");
+    halt;
+  }
   var low = 1, high = a;
   while low + 1 < high {
     var mid = low + div2(high - low);

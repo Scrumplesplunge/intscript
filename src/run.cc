@@ -5,6 +5,11 @@ import <optional>;
 import <string>;
 import <span>;
 import <variant>;
+import <vector>;
+import compiler.codegen;
+import compiler.parser;
+import as.parser;
+import as.encode;
 import intcode;
 import util.io;
 
@@ -79,15 +84,32 @@ void read_options(int& argc, char**& argv) {
   args.positional = std::span<char*>(argv, argc);
 }
 
+std::vector<program::value_type> load(const char* filename) {
+  auto extension = std::filesystem::path(filename).extension();
+  if (extension == ".ic") {
+    std::vector<program::value_type> buffer(program::max_size);
+    auto data = program::load(contents(filename), buffer);
+    buffer.resize(data.size());
+    return buffer;
+  } else if (extension == ".asm") {
+    return as::encode(as::parse(filename, contents(filename)));
+  } else if (extension == ".is") {
+    return as::encode(compiler::generate(
+        compiler::parse(filename, contents(filename))));
+  } else {
+    std::cerr << "Unknown extension " << std::quoted(extension.c_str())
+              << ", must be \".ic\", \".asm\", or \".is\".\n";
+    std::exit(1);
+  }
+}
+
 int main(int argc, char* argv[]) {
   read_options(argc, argv);
   if (args.positional.size() != 2) {
     std::cerr << "Usage: run <filename>\n";
     return 1;
   }
-  program::buffer buffer;
-  program program(program::load(init(args.positional.size(), argv), buffer),
-                  args.debug);
+  program program(load(argv[1]));
   while (!program.done()) {
     switch (program.resume()) {
       case program::ready:

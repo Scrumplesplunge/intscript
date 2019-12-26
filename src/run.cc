@@ -112,7 +112,7 @@ int main(int argc, char* argv[]) {
     std::cerr << "Usage: run <filename>\n";
     return 1;
   }
-  program program(load(argv[1]));
+  program program(load(argv[1]), args.debug);
   while (!program.done()) {
     switch (program.resume()) {
       case program::ready:

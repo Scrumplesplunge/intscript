@@ -1,0 +1,17 @@
+import util.div;
+import util.io;
+
+function main() {
+  if div2(64) == 32 {
+    puts("div2 is fine\n");
+  } else {
+    puts("div2 is broken\n");
+    output div2(64);
+  }
+  if div(72, 5) == 14 {
+    puts("div (positive) is fine\n");
+  } else {
+    puts("div (positive) is broken\n");
+    output div(72, 5);
+  }
+}

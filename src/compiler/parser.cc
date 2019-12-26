@@ -289,7 +289,7 @@ struct parser {
     } else if (consume_symbol("<=")) {
       return less_or_equal(std::move(left), parse_expression());
     } else if (consume_symbol(">=")) {
-      return greater_or_equal(parse_expression(), std::move(left));
+      return greater_or_equal(std::move(left), parse_expression());
     } else if (consume_symbol("!=")) {
       return not_equals(std::move(left), parse_expression());
     } else {
@@ -353,6 +353,7 @@ struct parser {
     std::vector<statement> else_branch;
     if (consume_name("else")) {
       eat("{");
+      parse_newline();
       else_branch = parse_statements();
       eat("}");
     }

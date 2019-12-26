@@ -57,6 +57,8 @@ struct context {
   }
 
   void gen_module(const module& m);
+
+  std::vector<as::statement> finish();
 };
 
 struct module_context {
@@ -210,9 +212,19 @@ struct function_context {
 context::context() {
   module_context root{this, {}};
   function_context f{&root, "_start"};
+  text.push_back(as::instruction{
+      as::adjust_relative_base{{{}, as::immediate{as::name{"stackstart"}}}}});
   f.scope.back().constants.emplace("main", as::immediate{as::name{"main"}});
   f.gen_stmt(call{expression::wrap(name{"main"}), {}});
   text.push_back(as::instruction{as::halt{}});
+}
+
+std::vector<as::statement> context::finish() {
+  auto output = std::move(text);
+  output.reserve(output.size() + data.size() + 1);
+  std::move(data.begin(), data.end(), std::back_inserter(output));
+  output.push_back(as::label{"stackstart"});
+  return output;
 }
 
 void context::gen_module(const module& m) {
@@ -486,7 +498,7 @@ as::input_param function_context::gen_expr(const sub& s) {
 as::input_param function_context::gen_expr(const less_than& l) {
   auto a = gen_expr(l.a);
   auto b = gen_expr(l.b);
-  auto result = module->context->label("mul");
+  auto result = module->context->label("lt");
   module->context->text.push_back(as::instruction{
       as::less_than{{a, b, {{}, as::address{as::name{result}}}}}});
   return as::input_param{result, as::immediate{as::literal{0}}};
@@ -495,7 +507,7 @@ as::input_param function_context::gen_expr(const less_than& l) {
 as::input_param function_context::gen_expr(const equals& e) {
   auto a = gen_expr(e.a);
   auto b = gen_expr(e.b);
-  auto result = module->context->label("mul");
+  auto result = module->context->label("eq");
   module->context->text.push_back(as::instruction{
       as::equals{{a, b, {{}, as::address{as::name{result}}}}}});
   return as::input_param{result, as::immediate{as::literal{0}}};
@@ -623,8 +635,9 @@ void function_context::gen_stmt(const if_statement& i) {
   gen_stmts(i.then_branch);
   if (!i.else_branch.empty()) {
     const auto end = as::input_param{{}, as::immediate{as::name{end_if}}};
+    const auto zero = as::input_param{{}, as::immediate{as::literal{0}}};
     module->context->text.push_back(
-        as::instruction{as::jump_if_false{{condition, end}}});
+        as::instruction{as::jump_if_false{{zero, end}}});
     module->context->text.push_back(as::label{else_branch});
     gen_stmts(i.else_branch);
   }
@@ -749,10 +762,7 @@ export std::vector<as::statement> generate(
   for (const auto& module : dependency_order(modules)) {
     context.gen_module(modules.at(module));
   }
-  auto combined = std::move(context.text);
-  std::move(context.data.begin(), context.data.end(),
-            std::back_inserter(combined));
-  return combined;
+  return context.finish();
 }
 
 }  // namespace compiler

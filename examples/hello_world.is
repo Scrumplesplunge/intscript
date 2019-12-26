@@ -1,12 +1,7 @@
+import util.io;
+
 const message = "Hello, World!\n";
 
-function print(string) {
-  while (*string) {
-    output *string;
-    string = string + 1;
-  }
-}
-
 function main() {
-  print(message);
+  puts(message);
 }

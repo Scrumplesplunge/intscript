@@ -3,15 +3,18 @@ import <fstream>;
 import <iostream>;
 import <optional>;
 import <string>;
+import <map>;
 import <span>;
 import <variant>;
 import <vector>;
+import compiler.ast;
 import compiler.codegen;
 import compiler.parser;
 import as.parser;
 import as.encode;
 import intcode;
 import util.io;
+import util.value_ptr;
 
 template <typename... Ts> struct overload : Ts... { using Ts::operator()...; };
 template <typename... Ts> overload(Ts...) -> overload<Ts...>;
@@ -94,8 +97,8 @@ std::vector<program::value_type> load(const char* filename) {
   } else if (extension == ".asm") {
     return as::encode(as::parse(filename, contents(filename)));
   } else if (extension == ".is") {
-    return as::encode(compiler::generate(
-        compiler::parse(filename, contents(filename))));
+    auto code = compiler::load(filename);
+    return as::encode(compiler::generate(code));
   } else {
     std::cerr << "Unknown extension " << std::quoted(extension.c_str())
               << ", must be \".ic\", \".asm\", or \".is\".\n";

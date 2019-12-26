@@ -5,6 +5,7 @@ import <optional>;
 import <vector>;
 import <iomanip>;
 import <iostream>;
+import <map>;
 import <span>;
 import as.ast;
 import as.encode;
@@ -97,27 +98,9 @@ void read_options(int& argc, char**& argv) {
   args.positional = std::span<char*>(argv, argc);
 }
 
-auto load_input() {
-  std::string_view file;
-  std::string source;
-  if (args.input == std::string_view("-")) {
-    file = "stdin";
-    source.assign(std::istreambuf_iterator<char>(std::cin), {});
-  } else {
-    file = args.input;
-    std::ifstream file(args.input);
-    if (!file.good()) {
-      std::cerr << "Unable to open " << std::quoted(args.input) << ".\n";
-      std::exit(1);
-    }
-    source.assign(std::istreambuf_iterator<char>(file), {});
-  }
-  return compiler::parse(file, source);
-};
-
 int main(int argc, char* argv[]) {
   read_options(argc, argv);
-  auto code = load_input();
+  auto code = compiler::load(args.input);
   auto compiled = compiler::generate(code);
   std::ofstream file;
   std::ostream* output;

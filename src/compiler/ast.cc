@@ -1,6 +1,7 @@
 export module compiler.ast;
 
 import <cstdint>;
+import <filesystem>;
 import <iostream>;
 import <iomanip>;
 import <span>;
@@ -18,6 +19,7 @@ overload(Ts...) -> overload<Ts...>;
 
 export using literal = std::variant<std::int64_t, std::string>;
 export struct name;
+export struct qualified_name { std::vector<std::string> parts; };
 export struct call;
 export struct add;
 export struct sub;
@@ -129,6 +131,24 @@ export struct declaration {
   static declaration wrap(T&& value) {
     return declaration{make_value<type>(std::forward<T>(value))};
   }
+};
+
+export struct import_statement {
+  std::vector<std::string> name;
+  std::filesystem::path resolve(const std::filesystem::path& context) const {
+    std::filesystem::path result = context;
+    for (const auto& part : name) result /= part;
+    result += ".is";
+    return result;
+  }
+};
+export struct module {
+  std::string name;
+  std::filesystem::path context() const {
+    return std::filesystem::path(name).parent_path();
+  }
+  std::vector<import_statement> imports;
+  std::vector<declaration> body;
 };
 
 export std::ostream& operator<<(std::ostream&, const expression&);
@@ -362,6 +382,29 @@ export std::ostream& print(
 export std::ostream& operator<<(
     std::ostream& output, const declaration& d) {
   return print(output, d, 0);
+}
+
+export std::ostream& operator<<(
+    std::ostream& output, const import_statement& i) {
+  return output << "import ";
+  bool first = true;
+  for (const auto& part : i.name) {
+    if (first) {
+      first = false;
+    } else {
+      output << ".";
+    }
+    output << part;
+  }
+  return output;
+}
+
+export std::ostream& operator<<(std::ostream& output, const module& m) {
+  output << "# module " << m.name << '\n';
+  for (auto& i : m.imports) output << i << '\n';
+  output << '\n';
+  for (auto& d : m.body) output << d << '\n';
+  return output;
 }
 
 }  // namespace compiler

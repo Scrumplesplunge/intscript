@@ -1,0 +1,6 @@
+function puts(string) {
+  while (*string) {
+    output *string;
+    string = string + 1;
+  }
+}

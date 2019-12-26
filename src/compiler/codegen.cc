@@ -4,6 +4,7 @@ module;
 
 export module compiler.codegen;
 
+import <filesystem>;
 import <map>;
 import <string>;
 import <iostream>;
@@ -30,6 +31,11 @@ overload(Ts...) -> overload<Ts...>;
   std::abort();  // std::exit(1);
 }
 
+struct module_exports {
+  std::set<std::string> variables;
+  std::map<std::string, as::immediate> constants;
+};
+
 struct context {
   std::map<std::string, int> labels;
   std::string label(std::string name) {
@@ -37,21 +43,11 @@ struct context {
     return name + std::to_string(id);
   }
 
-  std::set<std::string> variables;
-  std::map<std::string, as::immediate> constants;
-
-  bool has_global(std::string global) const {
-    if (variables.contains(global)) return true;
-    if (constants.contains(global)) return true;
-    return false;
-  }
-
+  std::map<std::string, module_exports> modules;
   std::vector<as::statement> text;
   std::vector<as::statement> data;
 
   context();
-
-  as::immediate eval_expr(const expression& e);
 
   as::immediate make_string(std::string value) {
     auto address = label("string");
@@ -59,6 +55,29 @@ struct context {
     data.push_back(as::directive{as::ascii{std::move(value)}});
     return as::name{address};
   }
+
+  void gen_module(const module& m);
+};
+
+struct module_context {
+  context* context = nullptr;
+
+  std::set<std::string> imported_variables;
+  std::map<std::string, as::immediate> imported_constants;
+  std::set<std::string> variables;
+  std::map<std::string, as::immediate> constants;
+
+  bool has_global(std::string global) const {
+    if (imported_variables.contains(global)) return true;
+    if (imported_constants.contains(global)) return true;
+    if (variables.contains(global)) return true;
+    if (constants.contains(global)) return true;
+    return false;
+  }
+
+  module_context(struct context* context, const module& m);
+
+  as::immediate eval_expr(const expression& e);
 
   void gen_decl(const constant& c);
   void gen_decl(const declare& d);
@@ -69,7 +88,7 @@ struct context {
 };
 
 struct function_context {
-  context* context = nullptr;
+  module_context* module = nullptr;
 
   struct environment {
     std::map<std::string, int> variables;
@@ -95,8 +114,10 @@ struct function_context {
       if (scope[i].variables.contains(name)) return local_variable;
       if (scope[i].constants.contains(name)) return local_constant;
     }
-    if (context->variables.contains(name)) return global_variable;
-    if (context->constants.contains(name)) return global_constant;
+    if (module->variables.contains(name)) return global_variable;
+    if (module->constants.contains(name)) return global_constant;
+    if (module->imported_variables.contains(name)) return global_variable;
+    if (module->imported_constants.contains(name)) return global_constant;
     return not_found;
   }
 
@@ -126,7 +147,11 @@ struct function_context {
         return j->second;
       }
     }
-    return context->constants.at(name);
+    if (auto i = module->constants.find(name); i != module->constants.end()) {
+      return i->second;
+    } else {
+      return module->imported_constants.at(name);
+    }
   }
 
   int local_size() {
@@ -183,13 +208,33 @@ struct function_context {
 };
 
 context::context() {
-  function_context f{this, "_start"};
+  module_context root{this, {}};
+  function_context f{&root, "_start"};
   f.scope.back().constants.emplace("main", as::immediate{as::name{"main"}});
   f.gen_stmt(call{expression::wrap(name{"main"}), {}});
   text.push_back(as::instruction{as::halt{}});
 }
 
-void context::gen_decl(const constant& c) {
+void context::gen_module(const module& m) {
+  module_context module{this, m};
+  module.gen_decls(m.body);
+  modules.emplace(m.name, module_exports{std::move(module.variables),
+                                         std::move(module.constants)});
+}
+
+module_context::module_context(struct context* context, const module& m)
+    : context(context) {
+  const auto path_context = std::filesystem::path(m.name).parent_path();
+  for (const auto& import : m.imports) {
+    const auto& dependency = context->modules.at(import.resolve(path_context));
+    imported_variables.insert(
+        dependency.variables.begin(), dependency.variables.end());
+    imported_constants.insert(
+        dependency.constants.begin(), dependency.constants.end());
+  }
+}
+
+void module_context::gen_decl(const constant& c) {
   if (has_global(c.name)) {
     std::ostringstream message;
     message << "Multiple definitions for " << std::quoted(c.name)
@@ -199,43 +244,43 @@ void context::gen_decl(const constant& c) {
   constants.emplace(c.name, eval_expr(c.value));
 }
 
-void context::gen_decl(const declare& d) {
+void module_context::gen_decl(const declare& d) {
   if (has_global(d.name)) {
     std::ostringstream message;
     message << "Multiple definitions for " << std::quoted(d.name)
             << " at global scope.";
     die(message.str());
   }
-  data.push_back(as::label{d.name});
-  data.push_back(as::integer{as::literal{0}});
+  context->data.push_back(as::label{d.name});
+  context->data.push_back(as::integer{as::literal{0}});
   variables.emplace(d.name);
 }
 
-void context::gen_decl(const function_definition& d) {
+void module_context::gen_decl(const function_definition& d) {
   function_context f{this, d.name};
   for (int i = 0, n = d.parameters.size(); i < n; i++) {
     f.arguments.emplace(d.parameters[i], i - n - 2);
   }
-  text.push_back(as::label{d.name});
+  context->text.push_back(as::label{d.name});
   f.gen_stmts(d.body);
   f.gen_stmt(return_statement{expression::wrap(literal{0})});
   constants.emplace(d.name, as::name{d.name});
 }
 
-void context::gen_decl(const declaration& d) {
+void module_context::gen_decl(const declaration& d) {
   std::visit([&](const auto& x) { gen_decl(x); }, *d.value);
 }
 
-void context::gen_decls(std::span<const declaration> declarations) {
+void module_context::gen_decls(std::span<const declaration> declarations) {
   for (const auto& declaration : declarations) gen_decl(declaration);
 }
 
-as::immediate context::eval_expr(const expression& e) {
+as::immediate module_context::eval_expr(const expression& e) {
   return std::visit(overload{
     [&](const literal& l) -> as::immediate {
       return std::visit(overload{
         [&](std::int64_t x) -> as::immediate { return as::literal{x}; },
-        [&](std::string x) { return make_string(std::move(x)); },
+        [&](std::string x) { return context->make_string(std::move(x)); },
       }, l);
     },
     [&](const name& n) -> as::immediate { return constants.at(n.value); },
@@ -316,11 +361,11 @@ as::output_param function_context::gen_addr(const name& n) {
 
 as::output_param function_context::gen_addr(const read& r) {
   auto value = gen_expr(r.address);
-  auto label = context->label("read");
+  auto label = module->context->label("read");
   // add 0, <value>, *label
   const auto zero = as::input_param{{}, as::literal{0}};
   const auto out = as::output_param{{}, as::address{as::name{label}}};
-  context->text.push_back(as::instruction{as::add{{zero, value, out}}});
+  module->context->text.push_back(as::instruction{as::add{{zero, value, out}}});
   // *0 @ label
   return as::output_param{label, as::address{as::literal{0}}};
 }
@@ -344,7 +389,7 @@ as::input_param function_context::gen_expr(const literal& l) {
       return as::input_param{{}, as::immediate{as::literal{x}}};
     },
     [&](std::string x) {
-      return as::input_param{{}, context->make_string(std::move(x))};
+      return as::input_param{{}, module->context->make_string(std::move(x))};
     },
   }, l);
 }
@@ -374,41 +419,42 @@ as::input_param function_context::gen_expr(const call& c) {
   push_scope();
   // Produce each argument.
   for (int i = 0; i < n; i++) {
-    define_variable(context->label("$argument"));
+    define_variable(module->context->label("$argument"));
     auto param = gen_expr(c.arguments[i]);
     const auto out =
         as::output_param{{}, as::relative{as::literal{start + i}}};
-    context->text.push_back(as::instruction{as::add{{zero, param, out}}});
+    module->context->text.push_back(as::instruction{as::add{{zero, param, out}}});
   }
   auto callee = gen_expr(c.function);
   pop_scope();
   // Store the output address.
-  auto output_label = context->label("return");
+  auto output_label = module->context->label("return");
   {
     const auto output_address =
         as::input_param{{}, as::immediate{as::name{output_label}}};
     const auto out =
         as::output_param{{}, as::relative{as::literal{start + n}}};
-    context->text.push_back(
+    module->context->text.push_back(
         as::instruction{as::add{{zero, output_address, out}}});
   }
   // Store the return address.
-  auto return_label = context->label("call");
+  auto return_label = module->context->label("call");
   {
     const auto return_address =
         as::input_param{{}, as::immediate{as::name{return_label}}};
     const auto out =
         as::output_param{{}, as::relative{as::literal{start + n + 1}}};
-    context->text.push_back(
+    module->context->text.push_back(
         as::instruction{as::add{{zero, return_address, out}}});
   }
   // Jump into the function.
   const int frame_size = start + n + 2;
-  context->text.push_back(
+  module->context->text.push_back(
       as::adjust_relative_base{{{}, as::immediate{as::literal{frame_size}}}});
-  context->text.push_back(as::instruction{as::jump_if_false{{zero, callee}}});
-  context->text.push_back(as::label{return_label});
-  context->text.push_back(as::adjust_relative_base{
+  module->context->text.push_back(
+      as::instruction{as::jump_if_false{{zero, callee}}});
+  module->context->text.push_back(as::label{return_label});
+  module->context->text.push_back(as::adjust_relative_base{
       {{}, as::immediate{as::literal{-frame_size}}}});
   return as::input_param{output_label, as::immediate{as::literal{0}}};
 }
@@ -416,8 +462,8 @@ as::input_param function_context::gen_expr(const call& c) {
 as::input_param function_context::gen_expr(const add& a) {
   auto l = gen_expr(a.a);
   auto r = gen_expr(a.b);
-  auto result = context->label("add");
-  context->text.push_back(
+  auto result = module->context->label("add");
+  module->context->text.push_back(
       as::instruction{as::add{{l, r, {{}, as::address{as::name{result}}}}}});
   return as::input_param{result, as::immediate{as::literal{0}}};
 }
@@ -425,8 +471,8 @@ as::input_param function_context::gen_expr(const add& a) {
 as::input_param function_context::gen_expr(const mul& m) {
   auto l = gen_expr(m.a);
   auto r = gen_expr(m.b);
-  auto result = context->label("mul");
-  context->text.push_back(
+  auto result = module->context->label("mul");
+  module->context->text.push_back(
       as::instruction{as::mul{{l, r, {{}, as::address{as::name{result}}}}}});
   return as::input_param{result, as::immediate{as::literal{0}}};
 }
@@ -440,8 +486,8 @@ as::input_param function_context::gen_expr(const sub& s) {
 as::input_param function_context::gen_expr(const less_than& l) {
   auto a = gen_expr(l.a);
   auto b = gen_expr(l.b);
-  auto result = context->label("mul");
-  context->text.push_back(as::instruction{
+  auto result = module->context->label("mul");
+  module->context->text.push_back(as::instruction{
       as::less_than{{a, b, {{}, as::address{as::name{result}}}}}});
   return as::input_param{result, as::immediate{as::literal{0}}};
 }
@@ -449,15 +495,15 @@ as::input_param function_context::gen_expr(const less_than& l) {
 as::input_param function_context::gen_expr(const equals& e) {
   auto a = gen_expr(e.a);
   auto b = gen_expr(e.b);
-  auto result = context->label("mul");
-  context->text.push_back(as::instruction{
+  auto result = module->context->label("mul");
+  module->context->text.push_back(as::instruction{
       as::equals{{a, b, {{}, as::address{as::name{result}}}}}});
   return as::input_param{result, as::immediate{as::literal{0}}};
 }
 
 as::input_param function_context::gen_expr(const input&) {
-  auto result = context->label("input");
-  context->text.push_back(
+  auto result = module->context->label("input");
+  module->context->text.push_back(
       as::instruction{as::input{{{}, as::address{as::name{result}}}}});
   return as::input_param{result, as::immediate{as::literal{0}}};
 }
@@ -475,7 +521,9 @@ as::immediate function_context::eval_expr(const expression& e) {
     [&](const literal& l) -> as::immediate {
       return std::visit(overload{
         [&](std::int64_t x) -> as::immediate { return as::literal{x}; },
-        [&](std::string x) { return context->make_string(std::move(x)); },
+        [&](std::string x) {
+          return module->context->make_string(std::move(x));
+        },
       }, l);
     },
     [&](const name& n) -> as::immediate { return get_constant(n.value); },
@@ -541,10 +589,10 @@ void function_context::gen_stmt(const constant& c) {
 
 void function_context::gen_stmt(const call& c) {
   auto value = gen_expr(c);
-  auto self = context->label("ignore");
+  auto self = module->context->label("ignore");
   const auto zero = as::input_param{{self}, as::immediate{as::literal{0}}};
   const auto out = as::output_param{{}, as::address{as::name{self}}};
-  context->text.push_back(as::instruction{as::add{{value, zero, out}}});
+  module->context->text.push_back(as::instruction{as::add{{value, zero, out}}});
 }
 
 void function_context::gen_stmt(const declare& d) {
@@ -560,71 +608,73 @@ void function_context::gen_stmt(const declare& d) {
 void function_context::gen_stmt(const assign& a) {
   auto value = gen_expr(a.right);
   auto address = gen_addr(a.left);
-  context->text.push_back(as::instruction{as::add{{
+  module->context->text.push_back(as::instruction{as::add{{
       {{}, as::immediate{as::literal{0}}}, value, address}}});
 }
 
 void function_context::gen_stmt(const if_statement& i) {
   auto condition = gen_expr(i.condition);
-  auto end_if = context->label("endif");
-  auto else_branch = i.else_branch.empty() ? end_if : context->label("else");
+  auto end_if = module->context->label("endif");
+  auto else_branch =
+      i.else_branch.empty() ? end_if : module->context->label("else");
   const auto target = as::input_param{{}, as::immediate{as::name{else_branch}}};
-  context->text.push_back(
+  module->context->text.push_back(
       as::instruction{as::jump_if_false{{condition, target}}});
   gen_stmts(i.then_branch);
   if (!i.else_branch.empty()) {
     const auto end = as::input_param{{}, as::immediate{as::name{end_if}}};
-    context->text.push_back(
+    module->context->text.push_back(
         as::instruction{as::jump_if_false{{condition, end}}});
-    context->text.push_back(as::label{else_branch});
+    module->context->text.push_back(as::label{else_branch});
     gen_stmts(i.else_branch);
   }
-  context->text.push_back(as::label{end_if});
+  module->context->text.push_back(as::label{end_if});
 }
 
 void function_context::gen_stmt(const while_statement& w) {
   push_scope();
-  auto while_start = context->label("whilestart");
-  auto while_cond = context->label("whilecond");
-  auto while_end = context->label("whileend");
+  auto while_start = module->context->label("whilestart");
+  auto while_cond = module->context->label("whilecond");
+  auto while_end = module->context->label("whileend");
   scope.back().break_label = while_end;
   scope.back().continue_label = while_cond;
   const auto cond = as::input_param{{}, as::immediate{as::name{while_cond}}};
-  context->text.push_back(as::instruction{
+  module->context->text.push_back(as::instruction{
       as::jump_if_false{{{{}, as::immediate{as::literal{0}}}, cond}}});
-  context->text.push_back(as::label{while_start});
+  module->context->text.push_back(as::label{while_start});
   gen_stmts(w.body);
-  context->text.push_back(as::label{while_cond});
+  module->context->text.push_back(as::label{while_cond});
   auto condition = gen_expr(w.condition);
   const auto start = as::input_param{{}, as::immediate{as::name{while_start}}};
-  context->text.push_back(
+  module->context->text.push_back(
       as::instruction{as::jump_if_true{{condition, start}}});
-  context->text.push_back(as::label{while_end});
+  module->context->text.push_back(as::label{while_end});
   pop_scope();
 }
 
 void function_context::gen_stmt(const output_statement& o) {
   auto value = gen_expr(o.value);
-  context->text.push_back(as::instruction{as::output{value}});
+  module->context->text.push_back(as::instruction{as::output{value}});
 }
 
 void function_context::gen_stmt(const return_statement& r) {
   // Store the return value at the output address.
-  auto output_label = context->label("output");
+  auto output_label = module->context->label("output");
   const auto zero = as::input_param{{}, as::immediate{as::literal{0}}};
   const auto output_address =
       as::input_param{{}, as::relative{as::literal{-2}}};
   const auto temp = as::output_param{{}, as::address{as::name{output_label}}};
-  context->text.push_back(
+  module->context->text.push_back(
       as::instruction{as::add{{zero, output_address, temp}}});
   const auto output =
       as::output_param{output_label, as::address{as::literal{0}}};
   auto value = gen_expr(r.value);
-  context->text.push_back(as::instruction{as::add{{zero, value, output}}});
+  module->context->text.push_back(
+      as::instruction{as::add{{zero, value, output}}});
   // Return to the caller.
   const auto return_address =
       as::input_param{{}, as::relative{as::literal{-1}}};
-  context->text.push_back(
+  module->context->text.push_back(
       as::instruction{as::jump_if_false{{zero, return_address}}});
 }
 
@@ -638,7 +688,7 @@ void function_context::gen_stmt(const break_statement&) {
   const auto break_label =
       as::input_param{{}, as::immediate{as::name{*scope.back().break_label}}};
   const auto zero = as::input_param{{}, as::immediate{as::literal{0}}};
-  context->text.push_back(
+  module->context->text.push_back(
       as::instruction{as::jump_if_false{{zero, break_label}}});
 }
 
@@ -652,7 +702,7 @@ void function_context::gen_stmt(const continue_statement&) {
   const auto zero = as::input_param{{}, as::immediate{as::literal{0}}};
   const auto continue_label = as::input_param{
       {}, as::immediate{as::name{*scope.back().continue_label}}};
-  context->text.push_back(
+  module->context->text.push_back(
       as::instruction{as::jump_if_false{{zero, continue_label}}});
 }
 
@@ -666,12 +716,42 @@ void function_context::gen_stmts(std::span<const statement> statements) {
   pop_scope();
 }
 
+std::vector<std::string> dependency_order(
+    const std::map<std::string, module>& modules) {
+  std::vector<std::string> output;
+  std::set<std::string> outstanding;
+  for (const auto& [k, v] : modules) outstanding.insert(k);
+  while (!outstanding.empty()) {
+    for (auto i = outstanding.begin(); i != outstanding.end();) {
+      const auto& module = modules.at(*i);
+      const auto context = module.context();
+      bool ready = true;
+      for (const auto& dependency : module.imports) {
+        if (outstanding.contains(dependency.resolve(context))) {
+          ready = false;
+          break;
+        }
+      }
+      if (ready) {
+        output.push_back(std::move(*i));
+        i = outstanding.erase(i);
+      } else {
+        ++i;
+      }
+    }
+  }
+  return output;
+}
+
 export std::vector<as::statement> generate(
-    std::span<const declaration> declarations) {
-  context ctx;
-  ctx.gen_decls(declarations);
-  auto combined = std::move(ctx.text);
-  std::move(ctx.data.begin(), ctx.data.end(), std::back_inserter(combined));
+    const std::map<std::string, module>& modules) {
+  context context;
+  for (const auto& module : dependency_order(modules)) {
+    context.gen_module(modules.at(module));
+  }
+  auto combined = std::move(context.text);
+  std::move(context.data.begin(), context.data.end(),
+            std::back_inserter(combined));
   return combined;
 }
 

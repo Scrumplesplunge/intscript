@@ -5,8 +5,10 @@ module;
 export module compiler.parser;
 
 import <charconv>;
+import <filesystem>;
 import <iomanip>;
 import <iostream>;
+import <map>;
 import <optional>;
 import <sstream>;
 import <span>;
@@ -14,6 +16,7 @@ import <string_view>;
 import <variant>;
 import <vector>;
 import compiler.ast;
+import util.io;
 import util.value_ptr;
 
 namespace compiler {
@@ -68,7 +71,7 @@ struct parser {
     skip_whitespace();
     auto first = source.data(), last = first + source.size();
     auto i = std::find_if_not(first, last, [](char c) {
-      constexpr std::string_view symbol_chars = "+-=<>!";
+      constexpr std::string_view symbol_chars = "+-=<>!.";
       return symbol_chars.find(c) != symbol_chars.npos;
     });
     return std::string_view(first, i - first);
@@ -85,7 +88,7 @@ struct parser {
   }
 
   void eat_symbol(std::string_view value) {
-    if (!consume_name(value)) {
+    if (!consume_symbol(value)) {
       std::ostringstream message;
       message << "Expected " << std::quoted(value) << ".";
       die(message.str());
@@ -480,8 +483,24 @@ struct parser {
     return {std::move(name), std::move(arguments), std::move(body)};
   }
 
-  std::vector<declaration> parse_program() {
-    std::vector<declaration> output;
+  import_statement parse_import() {
+    eat_name("import");
+    std::vector<std::string> parts = {parse_name().value};
+    while (peek_symbol() == ".") {
+      eat_symbol(".");
+      parts.push_back(parse_name().value);
+    }
+    eat(";");
+    return import_statement{std::move(parts)};
+  }
+
+  module parse_module() {
+    module output;
+    output.name = file;
+    while (peek_name() == "import") {
+      output.imports.push_back(parse_import());
+      parse_newline();
+    }
     while (true) {
       skip_whitespace();
       if (source.empty()) break;
@@ -492,12 +511,12 @@ struct parser {
       auto name = peek_name();
       if (name == "const") {
         auto x = parse_constant<declaration>();
-        std::move(x.begin(), x.end(), std::back_inserter(output));
+        std::move(x.begin(), x.end(), std::back_inserter(output.body));
       } else if (name == "var") {
         auto x = parse_var<declaration, declare_only>();
-        std::move(x.begin(), x.end(), std::back_inserter(output));
+        std::move(x.begin(), x.end(), std::back_inserter(output.body));
       } else if (name == "function") {
-        output.push_back(declaration::wrap(parse_function_definition()));
+        output.body.push_back(declaration::wrap(parse_function_definition()));
       } else {
         die("Expected declaration.");
       }
@@ -507,9 +526,30 @@ struct parser {
   }
 };
 
-export std::vector<declaration> parse(
-    std::string_view file, std::string_view source) {
-  return parser{file, source}.parse_program();
+export module parse(std::string_view file, std::string_view source) {
+  return parser{file, source}.parse_module();
+}
+
+void load_recursive(
+    std::map<std::string, module>& output, const char* filename) {
+  if (output.contains(filename)) return;
+  auto [i, _] = output.emplace(filename, parse(filename, contents(filename)));
+  const auto context = i->second.context();
+  for (const auto& import : i->second.imports) {
+    const auto path = import.resolve(context);
+    if (!std::filesystem::exists(path)) {
+      std::cerr << "Cannot find dependency " << std::quoted(path.c_str())
+                << " required by " << std::quoted(filename) << ".\n";
+      std::exit(1);
+    }
+    load_recursive(output, path.c_str());
+  }
+}
+
+export std::map<std::string, module> load(const char* filename) {
+  std::map<std::string, module> modules;
+  load_recursive(modules, filename);
+  return modules;
 }
 
 }  // namespace compiler

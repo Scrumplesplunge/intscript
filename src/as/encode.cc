@@ -247,6 +247,7 @@ export std::vector<std::int64_t> encode(std::span<const statement> input) {
       },
     }, statement);
   }
+  while (!output.empty() && output.back() == 0) output.pop_back();
   return output;
 }
 

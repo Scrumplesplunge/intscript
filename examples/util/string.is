@@ -1,0 +1,40 @@
+function strlen(s) {
+  var length = 0;
+  while *s {
+    s = s + 1;
+    length = length + 1;
+  }
+  return length;
+}
+
+function strcmp(a, b) {
+  while 1 {
+    if *a < *b {
+      return -1;
+    } else if *b < *a {
+      return 1;
+    } else if *a == 0 && *b == 0 {
+      return 0;
+    }
+    a = a + 1;
+    b = b + 1;
+  }
+}
+
+function strcpy(destination, source) {
+  while *source {
+    *destination = *source;
+    source = source + 1;
+    destination = destination + 1;
+  }
+  *destination = 0;
+}
+
+function memcpy(destination, source, length) {
+  var end = source + length;
+  while source < end {
+    *destination = *source;
+    source = source + 1;
+    destination = destination + 1;
+  }
+}

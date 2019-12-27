@@ -71,7 +71,7 @@ struct parser {
     skip_whitespace();
     auto first = source.data(), last = first + source.size();
     auto i = std::find_if_not(first, last, [](char c) {
-      constexpr std::string_view symbol_chars = "+-=<>!.&|";
+      constexpr std::string_view symbol_chars = "+-=<>!.&|%*/";
       return symbol_chars.find(c) != symbol_chars.npos;
     });
     return std::string_view(first, i - first);
@@ -265,16 +265,13 @@ struct parser {
   expression parse_product() {
     expression result = parse_prefix();
     while (true) {
-      if (peek() == '*') {
-        eat("*");
+      if (consume_symbol("*")) {
         result = expression::wrap(mul{{std::move(result), parse_prefix()}});
-      } else if (peek() == '/') {
-        eat("/");
+      } else if (consume_symbol("/")) {
         result = expression::wrap(call{
             expression::wrap(name{"div"}),
             {std::move(result), parse_prefix()}});
-      } else if (peek() == '%') {
-        eat("%");
+      } else if (consume_symbol("%")) {
         result = expression::wrap(call{
             expression::wrap(name{"mod"}),
             {std::move(result), parse_prefix()}});
@@ -288,12 +285,9 @@ struct parser {
   expression parse_sum() {
     expression result = parse_product();
     while (true) {
-      char lookahead = peek();
-      if (lookahead == '+') {
-        eat("+");
+      if (consume_symbol("+")) {
         result = expression::wrap(add{{std::move(result), parse_product()}});
-      } else if (lookahead == '-') {
-        eat("-");
+      } else if (consume_symbol("-")) {
         result = expression::wrap(sub{{std::move(result), parse_product()}});
       } else {
         break;

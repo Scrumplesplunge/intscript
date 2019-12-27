@@ -1,0 +1,23 @@
+import util.io;
+
+function part1next(before, after) {
+  
+}
+
+function main() {
+  var initial[25];
+  var y = 0;
+  while y < 5 {
+    var x = 0;
+    while x < 5 {
+      initial[y * 5 + x] = input;
+      x = x + 1;
+    }
+    if input != '\n' {
+      puts("Expected newline after 5 chars on line ");
+      puti(y + 1);
+      halt;
+    }
+    y = y + 1;
+  }
+}

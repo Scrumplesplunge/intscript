@@ -25,3 +25,19 @@ function puti(x) {
   }
   puts(buffer + i);
 }
+
+function getline(buffer, size) {
+  var i = 0, end = size - 1;
+  while i < end {
+    var x = input;
+    puts("ate: ");
+    output x;
+    output '\n';
+    if x == '\n' || x < 0 {
+      break;
+    }
+    buffer[i] = x;
+    i = i + 1;
+  }
+  buffer[i] = 0;
+}

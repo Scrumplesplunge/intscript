@@ -300,7 +300,7 @@ void module_context::gen_decl(const declare_array& d) {
   if (!std::holds_alternative<as::literal>(size)) {
     die("Array size is not a constant expression.");
   }
-  context->data.push_back(as::label{d.name});
+  context->data.push_back(as::label{"gv_" + d.name});
   for (int i = 0, n = std::get<as::literal>(size).value; i < n; i++) {
     context->data.push_back(as::integer{as::literal{0}});
   }

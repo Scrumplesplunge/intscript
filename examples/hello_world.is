@@ -1,7 +1,14 @@
 import util.io;
 
-const message = "Hello, World!\n";
+const message = "\n!dlroW ,olleH";
 
 function main() {
-  puts(message);
+  var data[20];
+  data[19] = 0;
+  var i = 0;
+  while message[i] {
+    data[18 - i] = message[i];
+    i = i + 1;
+  }
+  puts(data + 19 - i);
 }

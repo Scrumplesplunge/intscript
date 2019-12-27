@@ -82,7 +82,8 @@ struct module_context {
   as::immediate eval_expr(const expression& e);
 
   void gen_decl(const constant& c);
-  void gen_decl(const declare& d);
+  void gen_decl(const declare_scalar& d);
+  void gen_decl(const declare_array& d);
   void gen_decl(const function_definition& d);
   void gen_decl(const declaration& d);
 
@@ -93,6 +94,7 @@ struct function_context {
   module_context* module = nullptr;
 
   struct environment {
+    int size;
     std::map<std::string, int> variables;
     std::map<std::string, as::immediate> constants;
     std::optional<std::string> break_label, continue_label;
@@ -162,9 +164,22 @@ struct function_context {
     return size;
   }
 
-  void define_variable(std::string variable) {
+  void define_scalar(std::string variable) {
     assert(!has_local(variable));
-    scope.back().variables.emplace(variable, local_size());
+    auto& current = scope.back();
+    current.variables.emplace(variable, current.size);
+    current.size++;
+  }
+
+  void define_array(std::string variable, int size) {
+    assert(!has_local(variable));
+    auto& current = scope.back();
+    auto label = module->context->label(variable);
+    module->context->data.push_back(as::label{label});
+    for (int i = 0; i < size; i++) {
+      module->context->data.push_back(as::integer{as::literal{0}});
+    }
+    current.constants.emplace(variable, as::immediate{as::name{label}});
   }
 
   void define_constant(std::string name, as::immediate value) {
@@ -173,8 +188,9 @@ struct function_context {
   }
 
   void push_scope() {
+    const auto& current = scope.back();
     scope.push_back(
-        {{}, {}, scope.back().break_label, scope.back().continue_label});
+        {current.size, {}, {}, current.break_label, current.continue_label});
   }
   void pop_scope() { scope.pop_back(); }
 
@@ -198,7 +214,8 @@ struct function_context {
 
   void gen_stmt(const constant& c);
   void gen_stmt(const call& c);
-  void gen_stmt(const declare& d);
+  void gen_stmt(const declare_scalar& d);
+  void gen_stmt(const declare_array& d);
   void gen_stmt(const assign& a);
   void gen_stmt(const if_statement& i);
   void gen_stmt(const while_statement& w);
@@ -259,7 +276,7 @@ void module_context::gen_decl(const constant& c) {
   constants.emplace(c.name, eval_expr(c.value));
 }
 
-void module_context::gen_decl(const declare& d) {
+void module_context::gen_decl(const declare_scalar& d) {
   if (has_global(d.name)) {
     std::ostringstream message;
     message << "Multiple definitions for " << std::quoted(d.name)
@@ -269,6 +286,24 @@ void module_context::gen_decl(const declare& d) {
   context->data.push_back(as::label{d.name});
   context->data.push_back(as::integer{as::literal{0}});
   variables.emplace(d.name);
+}
+
+void module_context::gen_decl(const declare_array& d) {
+  if (has_global(d.name)) {
+    std::ostringstream message;
+    message << "Multiple definitions for " << std::quoted(d.name)
+            << " at global scope.";
+    die(message.str());
+  }
+  auto size = eval_expr(d.size);
+  if (!std::holds_alternative<as::literal>(size)) {
+    die("Array size is not a constant expression.");
+  }
+  context->data.push_back(as::label{d.name});
+  for (int i = 0, n = std::get<as::literal>(size).value; i < n; i++) {
+    context->data.push_back(as::integer{as::literal{0}});
+  }
+  constants.emplace(d.name, as::immediate{as::name{d.name}});
 }
 
 void module_context::gen_decl(const function_definition& d) {
@@ -434,7 +469,7 @@ as::input_param function_context::gen_expr(const call& c) {
   push_scope();
   // Produce each argument.
   for (int i = 0; i < n; i++) {
-    define_variable(module->context->label("$argument"));
+    define_scalar(module->context->label("$argument"));
     auto param = gen_expr(c.arguments[i]);
     const auto out =
         as::output_param{{}, as::relative{as::literal{start + i}}};
@@ -628,7 +663,7 @@ as::immediate function_context::eval_expr(const expression& e) {
         die(message.str());
       }
     },
-    [&](auto& x) -> as::immediate {
+    [&](const auto& x) -> as::immediate {
       std::ostringstream message;
       message << "Expression " << x << " is not a constant expression.";
       die(message.str());
@@ -654,14 +689,28 @@ void function_context::gen_stmt(const call& c) {
   module->context->text.push_back(as::instruction{as::add{{value, zero, out}}});
 }
 
-void function_context::gen_stmt(const declare& d) {
+void function_context::gen_stmt(const declare_scalar& d) {
   if (has_local(d.name)) {
     std::ostringstream message;
     message << "Multiple definitions for " << std::quoted(d.name)
             << " in function " << std::quoted(function_name) << ".";
     die(message.str());
   }
-  define_variable(d.name);
+  define_scalar(d.name);
+}
+
+void function_context::gen_stmt(const declare_array& d) {
+  if (has_local(d.name)) {
+    std::ostringstream message;
+    message << "Multiple definitions for " << std::quoted(d.name)
+            << " in function " << std::quoted(function_name) << ".";
+    die(message.str());
+  }
+  auto size = eval_expr(d.size);
+  if (!std::holds_alternative<as::literal>(size)) {
+    die("Array size is not a compile-time constant.");
+  }
+  define_array(d.name, std::get<as::literal>(size).value);
 }
 
 void function_context::gen_stmt(const assign& a) {

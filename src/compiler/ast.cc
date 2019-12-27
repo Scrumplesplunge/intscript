@@ -86,7 +86,8 @@ export bool is_lvalue(const expression& e) {
 }
 
 export struct constant;
-export struct declare;
+export struct declare_scalar;
+export struct declare_array;
 export struct assign;
 export struct if_statement;
 export struct while_statement;
@@ -96,10 +97,10 @@ export struct break_statement;
 export struct continue_statement;
 export struct halt_statement;
 export struct statement {
-  using type = std::variant<constant, call, declare, assign, if_statement,
-                            while_statement, output_statement, return_statement,
-                            break_statement, continue_statement,
-                            halt_statement>;
+  using type = std::variant<constant, call, declare_scalar, declare_array,
+                            assign, if_statement, while_statement,
+                            output_statement, return_statement, break_statement,
+                            continue_statement, halt_statement>;
   value_ptr<type> value;
 
   template <typename T>
@@ -109,7 +110,8 @@ export struct statement {
 };
 
 export struct constant { std::string name; expression value; };
-export struct declare { std::string name; };
+export struct declare_scalar { std::string name; };
+export struct declare_array { std::string name; expression size; };
 export struct assign { expression left, right; };
 export struct if_statement {
   expression condition;
@@ -131,7 +133,8 @@ export struct function_definition {
   std::vector<statement> body;
 };
 export struct declaration {
-  using type = std::variant<constant, declare, function_definition>;
+  using type = std::variant<constant, declare_scalar, declare_array,
+                            function_definition>;
   value_ptr<type> value;
 
   template <typename T>
@@ -251,8 +254,12 @@ export std::ostream& print(std::ostream& output, const call& c, int) {
   return output << c << ';';
 }
 
-export std::ostream& print(std::ostream& output, const declare& d, int) {
+export std::ostream& print(std::ostream& output, const declare_scalar& d, int) {
   return output << "var " << d.name << ';';
+}
+
+export std::ostream& print(std::ostream& output, const declare_array& d, int) {
+  return output << "var " << d.name << '[' << d.size << "];";
 }
 
 export std::ostream& print(std::ostream& output, const assign& a, int) {
@@ -316,7 +323,11 @@ export std::ostream& print(
   return output;
 }
 
-export std::ostream& operator<<(std::ostream& output, const declare& d) {
+export std::ostream& operator<<(std::ostream& output, const declare_scalar& d) {
+  return print(output, d, 0);
+}
+
+export std::ostream& operator<<(std::ostream& output, const declare_array& d) {
   return print(output, d, 0);
 }
 

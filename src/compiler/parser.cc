@@ -137,44 +137,48 @@ struct parser {
     advance(i - source.data());
   }
 
+  std::int64_t parse_integer() {
+    std::int64_t value;
+    auto [ptr, error] = std::from_chars(
+        source.data(), source.data() + source.size(), value);
+    if (error != std::errc()) die("Expected numeric literal.");
+    advance(ptr - source.data());
+    return value;
+  }
+
+  std::string parse_string_literal() {
+    eat("\"");
+    std::string value;
+    while (peek() != '"') {
+      if (peek() == '\\') {
+        advance(1);
+        switch (peek()) {
+          case '\\':
+          case '"':
+            value.push_back(get());
+            break;
+          case 'n':
+            value.push_back('\n');
+            advance(1);
+            break;
+          default:
+            die("Invalid escape sequence.");
+        }
+      } else {
+        value.push_back(get());
+      }
+    }
+    assert(source[0] == '"');
+    advance(1);
+    return value;
+  }
+
   literal parse_literal() {
     skip_whitespace();
     if (source.empty()) die("Unexpected end of input.");
-    if (std::isdigit(source[0])) {
-      std::int64_t value;
-      auto [ptr, error] = std::from_chars(
-          source.data(), source.data() + source.size(), value);
-      if (error != std::errc()) die("Expected numeric literal.");
-      advance(ptr - source.data());
-      return value;
-    } else if (source[0] == '"') {
-      eat("\"");
-      std::string value;
-      while (peek() != '"') {
-        if (peek() == '\\') {
-          advance(1);
-          switch (peek()) {
-            case '\\':
-            case '"':
-              value.push_back(get());
-              break;
-            case 'n':
-              value.push_back('\n');
-              advance(1);
-              break;
-            default:
-              die("Invalid escape sequence.");
-          }
-        } else {
-          value.push_back(get());
-        }
-      }
-      assert(source[0] == '"');
-      advance(1);
-      return value;
-    } else {
-      die("Expected a literal value.");
-    }
+    if (std::isdigit(source[0])) return parse_integer();
+    if (source[0] == '"') return parse_string_literal();
+    die("Expected a literal value.");
   }
 
   name parse_name() {
@@ -333,7 +337,14 @@ struct parser {
     while (true) {
       auto [id] = parse_name();
       skip_whitespace();
-      output.push_back(Output::wrap(declare{id}));
+      if (peek() == '[') {
+        eat("[");
+        auto size = parse_expression();
+        eat("]");
+        output.push_back(Output::wrap(declare_array{id, std::move(size)}));
+      } else {
+        output.push_back(Output::wrap(declare_scalar{id}));
+      }
       if constexpr (mode == declare_assign) {
         if (peek() == '=') {
           eat("=");

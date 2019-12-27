@@ -154,6 +154,7 @@ struct parser {
       case '\\': return '\\';
       case '\'': return '\'';
       case 'n': return '\n';
+      case 't': return '\t';
     }
     std::ostringstream message;
     message << "Unsupported escape sequence \"\\" << value << "\".";

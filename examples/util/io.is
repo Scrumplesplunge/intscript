@@ -37,7 +37,7 @@ function getline(buffer, size) {
       break;
     }
     buffer[i] = x;
-    i = i + 1;
+    i++;
   }
   buffer[i] = 0;
 }

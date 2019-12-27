@@ -498,7 +498,50 @@ struct parser {
       }
       auto expr = parse_expression();
       skip_whitespace();
-      if (!source.empty() && source[0] == '=') {
+      auto lookahead = peek_symbol();
+      if (lookahead == "+=") {
+        if (!is_lvalue(expr)) {
+          std::ostringstream message;
+          message << expr << " is not an lvalue.";
+          die(message.str());
+        }
+        eat_symbol(lookahead);
+        auto value = parse_expression();
+        eat(";");
+        output.push_back(
+            statement::wrap(add_assign{std::move(expr), std::move(value)}));
+      } else if (lookahead == "-=") {
+        if (!is_lvalue(expr)) {
+          std::ostringstream message;
+          message << expr << " is not an lvalue.";
+          die(message.str());
+        }
+        eat_symbol(lookahead);
+        auto value = parse_expression();
+        eat(";");
+        output.push_back(statement::wrap(
+            add_assign{std::move(expr), negate(std::move(value))}));
+      } else if (lookahead == "++") {
+        if (!is_lvalue(expr)) {
+          std::ostringstream message;
+          message << expr << " is not an lvalue.";
+          die(message.str());
+        }
+        eat_symbol(lookahead);
+        eat(";");
+        output.push_back(statement::wrap(
+            add_assign{std::move(expr), expression::wrap(literal{1})}));
+      } else if (lookahead == "--") {
+        if (!is_lvalue(expr)) {
+          std::ostringstream message;
+          message << expr << " is not an lvalue.";
+          die(message.str());
+        }
+        eat_symbol(lookahead);
+        eat(";");
+        output.push_back(statement::wrap(
+            add_assign{std::move(expr), expression::wrap(literal{-1})}));
+      } else if (lookahead == "=") {
         if (!is_lvalue(expr)) {
           std::ostringstream message;
           message << expr << " is not an lvalue.";

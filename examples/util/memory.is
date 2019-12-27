@@ -53,11 +53,11 @@ function malloc(n) {
         # Gap is a close fit. Consume the node.
         i[freenext] = entry[freenext];
         entry[0] = size;
-        freestorelength = freestorelength - 1;
+        freestorelength--;
         return entry + 1;
       } else {
         # Gap is big enough to have some room left over.
-        entry[freesize] = size - required;
+        entry[freesize] -= required;
         var p = entry + entry[freesize] + memheadersize;
         p[memsize] = required;
         return p;
@@ -89,10 +89,10 @@ function free(p) {
     # Joins two consecutive freestore nodes.
     i[freenext] = i[freenext][freenext];
     i[freesize] = i[freesize] + size + i[freenext][freesize];
-    freestorelength = freestorelength - 1;
+    freestorelength--;
   } else if append {
     # Appends directly onto the end of the previous free node.
-    i[freesize] = i[freesize] + size;
+    i[freesize] += size;
   } else if prepend {
     # Prepends onto the next free node.
     var recovered = p - memheadersize;
@@ -105,6 +105,6 @@ function free(p) {
     recovered[freenext] = i[freenext];
     recovered[freesize] = size;
     i[freenext] = recovered;
-    freestorelength = freestorelength + 1;
+    freestorelength++;
   }
 }

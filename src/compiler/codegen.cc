@@ -218,6 +218,7 @@ struct function_context {
   void gen_stmt(const declare_scalar& d);
   void gen_stmt(const declare_array& d);
   void gen_stmt(const assign& a);
+  void gen_stmt(const add_assign& a);
   void gen_stmt(const if_statement& i);
   void gen_stmt(const while_statement& w);
   void gen_stmt(const output_statement& o);
@@ -747,6 +748,13 @@ void function_context::gen_stmt(const assign& a) {
   auto address = gen_addr(a.left);
   module->context->text.push_back(as::instruction{as::add{{
       {{}, as::immediate{as::literal{0}}}, value, address}}});
+}
+
+void function_context::gen_stmt(const add_assign& a) {
+  auto value = gen_expr(a.right);
+  auto address = gen_addr(a.left);
+  module->context->text.push_back(as::instruction{as::add{{
+      address, value, {{}, address.output}}}});
 }
 
 void function_context::gen_stmt(const if_statement& i) {

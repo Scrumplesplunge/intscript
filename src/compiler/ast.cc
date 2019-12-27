@@ -54,6 +54,10 @@ export struct logical_or : calculation {};
 export struct input {};
 export struct read { expression address; };
 
+export expression negate(expression x) {
+  return expression::wrap(mul{{std::move(x), expression::wrap(literal{-1})}});
+}
+
 export expression logical_not(expression x) {
   return expression::wrap(equals{{std::move(x), expression::wrap(literal{0})}});
 }
@@ -89,6 +93,8 @@ export struct constant;
 export struct declare_scalar;
 export struct declare_array;
 export struct assign;
+export struct add_assign;
+export struct mod_assign;
 export struct if_statement;
 export struct while_statement;
 export struct output_statement;
@@ -98,7 +104,7 @@ export struct continue_statement;
 export struct halt_statement;
 export struct statement {
   using type = std::variant<constant, call, declare_scalar, declare_array,
-                            assign, if_statement, while_statement,
+                            assign, add_assign, if_statement, while_statement,
                             output_statement, return_statement, break_statement,
                             continue_statement, halt_statement>;
   value_ptr<type> value;
@@ -113,6 +119,7 @@ export struct constant { std::string name; expression value; };
 export struct declare_scalar { std::string name; };
 export struct declare_array { std::string name; expression size; };
 export struct assign { expression left, right; };
+export struct add_assign { expression left, right; };
 export struct if_statement {
   expression condition;
   std::vector<statement> then_branch, else_branch;
@@ -264,6 +271,10 @@ export std::ostream& print(std::ostream& output, const declare_array& d, int) {
 
 export std::ostream& print(std::ostream& output, const assign& a, int) {
   return output << a.left << " = " << a.right << ';';
+}
+
+export std::ostream& print(std::ostream& output, const add_assign& a, int) {
+  return output << a.left << " += " << a.right << ';';
 }
 
 export std::ostream& print(

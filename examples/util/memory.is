@@ -73,6 +73,9 @@ function malloc(n) {
 }
 
 function free(p) {
+  if p == 0 {
+    return 0;
+  }
   var size = p[memsize];
   heapsize = heapsize + memheadersize - size;
   var i = freestore;

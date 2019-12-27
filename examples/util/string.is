@@ -38,3 +38,27 @@ function memcpy(destination, source, length) {
     destination++;
   }
 }
+
+function memmove(destination, source, length) {
+  if destination < source {
+    return memcpy(destination, source, length);
+  } else if destination > source {
+    # Needs to be copied backwards.
+    var start = destination;
+    destination += length;
+    source += length;
+    while start < destination {
+      destination--;
+      source--;
+      *destination = *source;
+    }
+  }
+}
+
+function memset(destination, value, length) {
+  var end = destination + length;
+  while destination < end {
+    *destination = value;
+    destination++;
+  }
+}

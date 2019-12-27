@@ -10,7 +10,7 @@ import <array>;
 import <charconv>;  // bug
 import <optional>;  // bug
 import <span>;
-import <unordered_map>;
+import <vector>;
 import <variant>;
 import as.ast;
 
@@ -105,22 +105,17 @@ constexpr auto ops = [] {
 }();
 
 op decode_op(value_type x) {
-  check(0 <= x && x < (int)ops.size());
+  if (x < 0 || (value_type)ops.size() <= x) return op{};
   return ops[x];
 }
 
 class memory {
  public:
   value_type& operator[](value_type index) {
-    return chunks_[index / chunk_size][index % chunk_size];
-  }
-
-  value_type& at(value_type index) {
-    return chunks_.at(index / chunk_size)[index % chunk_size];
-  }
-
-  const value_type& at(value_type index) const {
-    return chunks_.at(index / chunk_size)[index % chunk_size];
+    check(0 <= index);
+    check(index < 50'000'000);
+    if (index >= (value_type)buffer_.size()) buffer_.resize(2 * index + 1);
+    return buffer_[index];
   }
 
   static as::input_param decode_input(mode m, std::int64_t arg) {
@@ -173,8 +168,7 @@ class memory {
   }
 
  private:
-  static constexpr int chunk_size = 1024;
-  std::unordered_map<value_type, std::array<value_type, chunk_size>> chunks_;
+  std::vector<value_type> buffer_;
 };
 
 export class program {

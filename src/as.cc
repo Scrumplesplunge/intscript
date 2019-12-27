@@ -1,5 +1,3 @@
-#include <cassert>
-
 import <fstream>;
 import <iomanip>;
 import <iostream>;
@@ -10,6 +8,8 @@ import <variant>;
 import <vector>;
 import as.parser;
 import as.encode;
+
+#include <cassert>
 
 template <typename... Ts> struct overload : Ts... { using Ts::operator()...; };
 template <typename... Ts> overload(Ts...) -> overload<Ts...>;

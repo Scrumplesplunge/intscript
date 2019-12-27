@@ -1,23 +1,133 @@
+import util.div;
 import util.io;
+import util.memory;
+import util.string;
 
-function part1next(before, after) {
-  
+function part1step(before, after) {
+  var y = 0;
+  while y < 5 {
+    var x = 0;
+    while x < 5 {
+      var neighbours = 0;
+      if x > 0 && before[5 * y + x - 1] {
+        neighbours++;
+      }
+      if x < 4 && before[5 * y + x + 1] {
+        neighbours++;
+      }
+      if y > 0 && before[5 * y + x - 5] {
+        neighbours++;
+      }
+      if y < 4 && before[5 * y + x + 5] {
+        neighbours++;
+      }
+      if before[5 * y + x] {
+        after[5 * y + x] = (neighbours == 1);
+      } else {
+        after[5 * y + x] = (neighbours == 1 || neighbours == 2);
+      }
+      x++;
+    }
+    y++;
+  }
+}
+
+function encode(state) {
+  var total = 0;
+  var points = 1;
+  var i = 0;
+  while i < 25 {
+    if state[i] {
+      total += points;
+    }
+    points += points;
+    i++;
+  }
+  return total;
+}
+
+var seenmap;
+var seensize;
+var seencapacity;
+
+function seenadd(x) {
+  var i = 0, j = seensize;
+  while i < j {
+    var mid = i + (j - i) / 2;
+    if seenmap[mid] < x {
+      i = mid + 1;
+    } else {
+      j = mid;
+    }
+  }
+  if i < seensize && seenmap[i] == x {
+    # Already seen.
+    return 0;
+  }
+  if seensize == seencapacity {
+    # Need to expand the storage.
+    seencapacity += seencapacity;
+    var temp = malloc(seencapacity);
+    memcpy(temp, seenmap, i);
+    temp[i] = x;
+    memcpy(temp + i + 1, seenmap + i, seensize - i);
+    free(seenmap);
+    seenmap = temp;
+  } else {
+    memmove(seenmap + i + 1, seenmap + i, seensize - i);
+    seenmap[i] = x;
+  }
+  seensize++;
+  return 1;
+}
+
+function part1(initial) {
+  var buffer[50];
+  var a = buffer, b = buffer + 25;
+  memcpy(a, initial, 25);
+  while 1 {
+    var x = encode(a);
+    if seenadd(x) == 0 {
+      return x;
+    }
+    part1step(a, b);
+    var temp = a;
+    a = b;
+    b = temp;
+  }
 }
 
 function main() {
+  meminit();
   var initial[25];
   var y = 0;
   while y < 5 {
     var x = 0;
     while x < 5 {
-      initial[y * 5 + x] = input;
-      x = x + 1;
+      var temp = input;
+      if temp == '#' {
+        initial[5 * y + x] = 1;
+      } else if temp == '.' {
+        initial[5 * y + x] = 0;
+      } else {
+        puts("Expected '#' or '.' at line ");
+        puti(y + 1);
+        puts(", column ");
+        puti(x + 1);
+        puts(".\n");
+        halt;
+      }
+      x++;
     }
     if input != '\n' {
       puts("Expected newline after 5 chars on line ");
       puti(y + 1);
       halt;
     }
-    y = y + 1;
+    y++;
   }
+
+  puts("part1 ");
+  puti(part1(initial));
+  puts("\n");
 }

@@ -493,16 +493,20 @@ as::input_param function_context::gen_expr(const call& c) {
   }
   auto get_callee = as::input_param{{}, as::address{as::name{*callee.label}}};
   // Adjust the relative base to point at the start of the arguments.
-  auto args = module->context->label("args");
-  module->context->text.push_back(as::instruction{
-      as::add{{get_callee, {{}, as::immediate{as::literal{-(n + 2)}}},
-               {{}, as::address{as::name{args}}}}}});
-  module->context->text.push_back(as::instruction{
-      as::adjust_relative_base{{args, as::immediate{as::literal{0}}}}});
+  //auto args = module->context->label("args");
+  //module->context->text.push_back(as::instruction{
+  //    as::add{{get_callee, {{}, as::immediate{as::literal{-(n + 2)}}},
+  //             {{}, as::address{as::name{args}}}}}});
+  //module->context->text.push_back(as::instruction{
+  //    as::adjust_relative_base{{args, as::immediate{as::literal{0}}}}});
   // Compute the arguments.
   for (int i = 0; i < n; i++) {
     auto param = gen_expr(c.arguments[i]);
-    auto out = as::output_param{{}, as::relative{as::literal{i}}};
+    auto label = module->context->label("param");
+    module->context->text.push_back(as::instruction{
+        as::add{{get_callee, {{}, as::immediate{as::literal{i - n - 2}}},
+                 {{}, as::address{as::name{label}}}}}});
+    auto out = as::output_param{label, as::address{as::literal{0}}};
     module->context->text.push_back(
         as::instruction{as::add{{zero, param, out}}});
   }
@@ -511,7 +515,11 @@ as::input_param function_context::gen_expr(const call& c) {
   {
     const auto output_address =
         as::input_param{{}, as::immediate{as::name{output_label}}};
-    const auto out = as::output_param{{}, as::relative{as::literal{n}}};
+    auto label = module->context->label("output");
+    module->context->text.push_back(as::instruction{
+        as::add{{get_callee, {{}, as::immediate{as::literal{-2}}},
+                 {{}, as::address{as::name{label}}}}}});
+    auto out = as::output_param{label, as::address{as::literal{0}}};
     module->context->text.push_back(
         as::instruction{as::add{{zero, output_address, out}}});
   }
@@ -520,18 +528,22 @@ as::input_param function_context::gen_expr(const call& c) {
   {
     const auto return_address =
         as::input_param{{}, as::immediate{as::name{return_label}}};
-    const auto out = as::output_param{{}, as::relative{as::literal{n + 1}}};
+    auto label = module->context->label("return");
+    module->context->text.push_back(as::instruction{
+        as::add{{get_callee, {{}, as::immediate{as::literal{-1}}},
+                 {{}, as::address{as::name{label}}}}}});
+    auto out = as::output_param{label, as::address{as::literal{0}}};
     module->context->text.push_back(
         as::instruction{as::add{{zero, return_address, out}}});
   }
   // Revert the relative base.
-  auto args2 = module->context->label("revertargs");
-  module->context->text.push_back(as::instruction{
-      as::mul{{{{}, as::address{as::name{args}}},
-               {{}, as::immediate{as::literal{-1}}},
-               {{}, as::address{as::name{args2}}}}}});
-  module->context->text.push_back(as::instruction{
-      as::adjust_relative_base{{args2, as::immediate{as::literal{0}}}}});
+  //auto args2 = module->context->label("revertargs");
+  //module->context->text.push_back(as::instruction{
+  //    as::mul{{{{}, as::address{as::name{args}}},
+  //             {{}, as::immediate{as::literal{-1}}},
+  //             {{}, as::address{as::name{args2}}}}}});
+  //module->context->text.push_back(as::instruction{
+  //    as::adjust_relative_base{{args2, as::immediate{as::literal{0}}}}});
   // Jump into the function.
   module->context->text.push_back(
       as::instruction{as::jump_if_false{{zero, callee}}});

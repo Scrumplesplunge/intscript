@@ -263,9 +263,23 @@ struct parser {
 
   expression parse_product() {
     expression result = parse_prefix();
-    while (peek() == '*') {
-      eat("*");
-      result = expression::wrap(mul{{std::move(result), parse_prefix()}});
+    while (true) {
+      if (peek() == '*') {
+        eat("*");
+        result = expression::wrap(mul{{std::move(result), parse_prefix()}});
+      } else if (peek() == '/') {
+        eat("/");
+        result = expression::wrap(call{
+            expression::wrap(name{"div"}),
+            {std::move(result), parse_prefix()}});
+      } else if (peek() == '%') {
+        eat("%");
+        result = expression::wrap(call{
+            expression::wrap(name{"mod"}),
+            {std::move(result), parse_prefix()}});
+      } else {
+        break;
+      }
     }
     return result;
   }

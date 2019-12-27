@@ -11,6 +11,9 @@ function puti(x) {
   if x == 0 {
     puts("0");
     return 0;
+  } else if x < 0 {
+    puts("-");
+    x = -x;
   }
   var buffer[20];
   buffer[19] = 0;

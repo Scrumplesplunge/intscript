@@ -1,9 +1,14 @@
 import util.io;
+import util.memory;
 
 const message = "\n!dlroW ,olleH";
 
 function main() {
-  var data[20];
+  meminit();
+  var data = malloc(20);
+  var unused1 = malloc(10);
+  var unused2 = malloc(10);
+  free(unused1);
   data[19] = 0;
   var i = 0;
   while message[i] {
@@ -13,4 +18,7 @@ function main() {
   puts(data + 19 - i);
   puti(42);
   puts("\n");
+  free(data);
+  free(unused2);
+  memstats();
 }

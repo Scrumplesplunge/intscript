@@ -1,0 +1,110 @@
+import io;
+
+var freestore;
+var heapsize;
+var maxheapsize;
+var freestorelength;
+
+const memheadersize = 1;  # Size of allocation.
+const memmingapsize = 4;
+
+# Each allocation has the following header fields.
+const memsize = -1;  # Size of the allocation, including the header.
+
+# Each freestore node has the following fields.
+const freenext = 0;  # Pointer to the next freestore node.
+const freesize = 1;  # Size of the free space, including the freestore node.
+
+function meminit() {
+  freestore = heapstart;
+  freestore[freenext] = heapstart + 2;
+  freestore[freesize] = 0;
+  freestore[freenext][freenext] = 0;
+  heapsize = 0;
+  maxheapsize = 0;
+  freestorelength = 0;
+}
+
+function memstats() {
+  puts("== Memory Stats =======\nHeap size: ");
+  puti(heapsize);
+  puts("\nMax heap size: ");
+  puti(maxheapsize);
+  puts("\nFreestore length: ");
+  puti(freestorelength);
+  puts("\n=======================\n");
+}
+
+function malloc(n) {
+  heapsize = heapsize + n;
+  if heapsize > maxheapsize {
+    maxheapsize = heapsize;
+  }
+  var required = memheadersize + n;
+  var i = freestore;
+  while 1 {
+    var entry = i[freenext];
+    if entry[freenext] {
+      var size = entry[freesize];
+      if size < required {
+        # Gap is not big enough. Try the next gap.
+        i = entry;
+      } else if size == required || size < required + memmingapsize {
+        # Gap is a close fit. Consume the node.
+        i[freenext] = entry[freenext];
+        entry[0] = size;
+        freestorelength = freestorelength - 1;
+        return entry + 1;
+      } else {
+        # Gap is big enough to have some room left over.
+        entry[freesize] = size - required;
+        var p = entry + entry[freesize] + memheadersize;
+        p[memsize] = required;
+        return p;
+      }
+    } else {
+      # Reached the end of the freelist.
+      i[freenext] = entry + required;
+      var p = entry + memheadersize;
+      p[memsize] = required;
+      return p;
+    }
+  }
+}
+
+function free(p) {
+  var size = p[memsize];
+  heapsize = heapsize + memheadersize - size;
+  var i = freestore;
+  while i[freenext] < p {
+    i = i[freenext];
+  }
+  # By the loop condition, i[freenext] >= p.
+  # Also by the loop condition, i < p.
+  # Furthermore, since p cannot be a freestore node, i[freenext] != p.
+  # Hence, i < p < i[freenext].
+  var append = (i + i[freesize] + memheadersize == p);
+  var prepend = (i[freenext] == p + size - 1);
+  if append && prepend {
+    # Joins two consecutive freestore nodes.
+    i[freenext] = i[freenext][freenext];
+    i[freesize] = i[freesize] + size + i[freenext][freesize];
+    freestorelength = freestorelength - 1;
+  } else if append {
+    # Appends directly onto the end of the previous free node.
+    i[freesize] = i[freesize] + size;
+  } else if prepend {
+    # Prepends onto the next free node.
+    var recovered = p - memheadersize;
+    recovered[freenext] = i[freenext][freenext];
+    recovered[freesize] = size + i[freenext][freesize];
+    i[freenext] = recovered;
+  } else {
+    # New gap.
+    var recovered = p - memheadersize;
+    recovered[freenext] = i[freenext];
+    recovered[freesize] = size;
+    i[freenext] = recovered;
+    freestorelength = freestorelength + 1;
+  }
+}

@@ -65,7 +65,9 @@ struct module_context {
   context* context = nullptr;
 
   std::set<std::string> imported_variables;
-  std::map<std::string, as::immediate> imported_constants;
+  std::map<std::string, as::immediate> imported_constants = {
+    {"heapstart", as::immediate{as::name{"heapstart"}}},
+  };
   std::set<std::string> variables;
   std::map<std::string, as::immediate> constants;
 
@@ -242,6 +244,7 @@ std::vector<as::statement> context::finish() {
   output.reserve(output.size() + data.size() + 1);
   std::move(rodata.begin(), rodata.end(), std::back_inserter(output));
   std::move(data.begin(), data.end(), std::back_inserter(output));
+  output.push_back(as::label{"heapstart"});
   return output;
 }
 

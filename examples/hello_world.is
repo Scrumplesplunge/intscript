@@ -11,4 +11,6 @@ function main() {
     i = i + 1;
   }
   puts(data + 19 - i);
+  puti(42);
+  puts("\n");
 }

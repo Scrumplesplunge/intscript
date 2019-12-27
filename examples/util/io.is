@@ -8,14 +8,17 @@ function puts(string) {
 }
 
 function puti(x) {
-  if x < 0 {
-    puts("-");
-    x = -x;
+  if x == 0 {
+    puts("0");
+    return 0;
   }
-  puts("reversed[");
+  var buffer[20];
+  buffer[19] = 0;
+  var i = 19;
   while x {
-    output "0"[0] + pmod(x, 10);
+    i = i - 1;
+    buffer[i] = '0' + pmod(x, 10);
     x = pdiv(x, 10);
   }
-  puts("]");
+  puts(buffer + i);
 }

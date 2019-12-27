@@ -146,28 +146,31 @@ struct parser {
     return value;
   }
 
+  char get_char() {
+    char value = get();
+    if (value != '\\') return value;
+    value = get();
+    switch (value) {
+      case '\\': return '\\';
+      case '\'': return '\'';
+      case 'n': return '\n';
+    }
+    std::ostringstream message;
+    message << "Unsupported escape sequence \"\\" << value << "\".";
+    die(message.str());
+  }
+
+  std::int64_t parse_char_literal() {
+    eat("'");
+    char value = get_char();
+    eat("'");
+    return value;
+  }
+
   std::string parse_string_literal() {
     eat("\"");
     std::string value;
-    while (peek() != '"') {
-      if (peek() == '\\') {
-        advance(1);
-        switch (peek()) {
-          case '\\':
-          case '"':
-            value.push_back(get());
-            break;
-          case 'n':
-            value.push_back('\n');
-            advance(1);
-            break;
-          default:
-            die("Invalid escape sequence.");
-        }
-      } else {
-        value.push_back(get());
-      }
-    }
+    while (peek() != '"') value.push_back(get_char());
     assert(source[0] == '"');
     advance(1);
     return value;
@@ -177,6 +180,7 @@ struct parser {
     skip_whitespace();
     if (source.empty()) die("Unexpected end of input.");
     if (std::isdigit(source[0])) return parse_integer();
+    if (source[0] == '\'') return parse_char_literal();
     if (source[0] == '"') return parse_string_literal();
     die("Expected a literal value.");
   }
@@ -192,7 +196,7 @@ struct parser {
   expression parse_term() {
     skip_whitespace();
     if (source.empty()) die("Unexpected end of input.");
-    if (source[0] == '"' || std::isdigit(source[0])) {
+    if (source[0] == '\'' || source[0] == '"' || std::isdigit(source[0])) {
       return expression::wrap(parse_literal());
     }
     if (source[0] == '(') {
@@ -449,6 +453,7 @@ struct parser {
     std::vector<statement> output;
     auto parse_line = [&] {
       if (source.empty()) die("Unexpected end of input.");
+      if (source[0] == '\n') return;
       if (std::isalpha(source[0])) {
         auto word = peek_name();
         if (word == "const") {

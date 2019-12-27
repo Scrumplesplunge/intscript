@@ -45,14 +45,14 @@ struct context {
 
   std::map<std::string, module_exports> modules;
   std::vector<as::statement> text;
-  std::vector<as::statement> data;
+  std::vector<as::statement> rodata, data;
 
   context();
 
   as::immediate make_string(std::string value) {
     auto address = label("string");
-    data.push_back(as::label{address});
-    data.push_back(as::directive{as::ascii{std::move(value)}});
+    rodata.push_back(as::label{address});
+    rodata.push_back(as::directive{as::ascii{std::move(value)}});
     return as::name{address};
   }
 
@@ -94,14 +94,15 @@ struct function_context {
   module_context* module = nullptr;
 
   struct environment {
-    int size;
+    int size = 0;
     std::map<std::string, int> variables;
     std::map<std::string, as::immediate> constants;
     std::optional<std::string> break_label, continue_label;
   };
   std::string function_name;
-  std::map<std::string, int> arguments = {};
+  std::set<std::string> arguments = {};
   std::vector<environment> scope = {environment{}};
+  int max_size = 0;
 
   enum variable_kind {
     not_found,
@@ -130,13 +131,17 @@ struct function_context {
     return kind == local_variable || kind == local_constant;
   }
 
-  int get_local_variable(std::string name) const {
+  as::output_param get_local_variable(std::string name) const {
     assert(lookup(name) == local_variable || lookup(name) == argument);
-    if (auto j = arguments.find(name); j != arguments.end()) return j->second;
+    if (arguments.contains(name)) {
+      return {{}, as::address{as::name{"arg_" + function_name + "_" + name}}};
+    }
     for (int i = scope.size() - 1; i >= 0; i--) {
       if (auto j = scope[i].variables.find(name);
           j != scope[i].variables.end()) {
-        return j->second;
+        const auto label =
+            "lv_" + function_name + "_" + std::to_string(j->second);
+        return {{}, as::address{as::name{label}}};
       }
     }
     std::ostringstream message;
@@ -158,28 +163,22 @@ struct function_context {
     }
   }
 
-  int local_size() {
-    int size = 0;
-    for (auto& layer : scope) size += layer.variables.size();
-    return size;
-  }
-
   void define_scalar(std::string variable) {
     assert(!has_local(variable));
     auto& current = scope.back();
     current.variables.emplace(variable, current.size);
     current.size++;
+    if (current.size > max_size) max_size = current.size;
   }
 
   void define_array(std::string variable, int size) {
     assert(!has_local(variable));
     auto& current = scope.back();
-    auto label = module->context->label(variable);
-    module->context->data.push_back(as::label{label});
-    for (int i = 0; i < size; i++) {
-      module->context->data.push_back(as::integer{as::literal{0}});
-    }
+    const auto label =
+        "lv_" + function_name + "_" + std::to_string(current.size);
     current.constants.emplace(variable, as::immediate{as::name{label}});
+    current.size += size;
+    if (current.size > max_size) max_size = current.size;
   }
 
   void define_constant(std::string name, as::immediate value) {
@@ -232,9 +231,8 @@ struct function_context {
 context::context() {
   module_context root{this, {}};
   function_context f{&root, "_start"};
-  text.push_back(as::instruction{
-      as::adjust_relative_base{{{}, as::immediate{as::name{"stackstart"}}}}});
-  f.scope.back().constants.emplace("main", as::immediate{as::name{"main"}});
+  f.scope.back().constants.emplace(
+      "main", as::immediate{as::name{"func_main"}});
   f.gen_stmt(call{expression::wrap(name{"main"}), {}});
   text.push_back(as::instruction{as::halt{}});
 }
@@ -242,8 +240,8 @@ context::context() {
 std::vector<as::statement> context::finish() {
   auto output = std::move(text);
   output.reserve(output.size() + data.size() + 1);
+  std::move(rodata.begin(), rodata.end(), std::back_inserter(output));
   std::move(data.begin(), data.end(), std::back_inserter(output));
-  output.push_back(as::label{"stackstart"});
   return output;
 }
 
@@ -283,7 +281,7 @@ void module_context::gen_decl(const declare_scalar& d) {
             << " at global scope.";
     die(message.str());
   }
-  context->data.push_back(as::label{d.name});
+  context->data.push_back(as::label{"gv_" + d.name});
   context->data.push_back(as::integer{as::literal{0}});
   variables.emplace(d.name);
 }
@@ -303,18 +301,29 @@ void module_context::gen_decl(const declare_array& d) {
   for (int i = 0, n = std::get<as::literal>(size).value; i < n; i++) {
     context->data.push_back(as::integer{as::literal{0}});
   }
-  constants.emplace(d.name, as::immediate{as::name{d.name}});
+  constants.emplace(d.name, as::immediate{as::name{"gv_" + d.name}});
 }
 
 void module_context::gen_decl(const function_definition& d) {
   function_context f{this, d.name};
-  for (int i = 0, n = d.parameters.size(); i < n; i++) {
-    f.arguments.emplace(d.parameters[i], i - n - 2);
+  for (const auto& parameter : d.parameters) {
+    context->text.push_back(as::label{"arg_" + d.name + "_" + parameter});
+    context->text.push_back(as::directive{as::integer{as::literal{0}}});
+    f.arguments.emplace(parameter);
   }
-  context->text.push_back(as::label{d.name});
+  context->text.push_back(as::label{"func_" + d.name + "_output"});
+  context->text.push_back(as::directive{as::integer{as::literal{0}}});
+  context->text.push_back(as::label{"func_" + d.name + "_return"});
+  context->text.push_back(as::directive{as::integer{as::literal{0}}});
+  context->text.push_back(as::label{"func_" + d.name});
   f.gen_stmts(d.body);
   f.gen_stmt(return_statement{expression::wrap(literal{0})});
-  constants.emplace(d.name, as::name{d.name});
+  constants.emplace(d.name, as::name{"func_" + d.name});
+  for (int i = 0; i < f.max_size; i++) {
+    context->data.push_back(
+        as::label{"lv_" + f.function_name + "_" + std::to_string(i)});
+    context->data.push_back(as::directive{as::integer{as::literal{0}}});
+  }
 }
 
 void module_context::gen_decl(const declaration& d) {
@@ -402,10 +411,12 @@ as::output_param function_context::gen_addr(const name& n) {
       break;
     }
     case global_variable:
-      return {{}, as::address{as::name{n.value}}};
+      return {{}, as::address{as::name{"gv_" + n.value}}};
     case argument:
+      return {{},
+              as::address{as::name{"arg_" + function_name + "_" + n.value}}};
     case local_variable:
-      return {{}, as::relative{as::literal{get_local_variable(n.value)}}};
+      return get_local_variable(n.value);
   }
 }
 
@@ -456,34 +467,47 @@ as::input_param function_context::gen_expr(const name& n) {
     case local_constant:
       return {{}, get_constant(n.value)};
     case global_variable:
+      return {{}, as::address{as::name{"gv_" + n.value}}};
     case argument:
+      return {{},
+              as::address{as::name{"arg_" + function_name + "_" + n.value}}};
     case local_variable:
-      return gen_addr(n);
+      return get_local_variable(n.value);
   }
 }
 
 as::input_param function_context::gen_expr(const call& c) {
   const auto zero = as::input_param{{}, as::literal{0}};
-  int start = local_size();
   const int n = c.arguments.size();
-  push_scope();
-  // Produce each argument.
-  for (int i = 0; i < n; i++) {
-    define_scalar(module->context->label("$argument"));
-    auto param = gen_expr(c.arguments[i]);
-    const auto out =
-        as::output_param{{}, as::relative{as::literal{start + i}}};
-    module->context->text.push_back(as::instruction{as::add{{zero, param, out}}});
-  }
+  // Compute the function address.
   auto callee = gen_expr(c.function);
-  pop_scope();
+  if (!callee.label) {
+    auto out = module->context->label("callee");
+    module->context->text.push_back(as::instruction{
+        as::add{{zero, callee, {{}, as::address{as::name{out}}}}}});
+    callee = {out, as::immediate{as::literal{0}}};
+  }
+  auto get_callee = as::input_param{{}, as::address{as::name{*callee.label}}};
+  // Adjust the relative base to point at the start of the arguments.
+  auto args = module->context->label("args");
+  module->context->text.push_back(as::instruction{
+      as::add{{get_callee, {{}, as::immediate{as::literal{-(n + 2)}}},
+               {{}, as::address{as::name{args}}}}}});
+  module->context->text.push_back(as::instruction{
+      as::adjust_relative_base{{args, as::immediate{as::literal{0}}}}});
+  // Compute the arguments.
+  for (int i = 0; i < n; i++) {
+    auto param = gen_expr(c.arguments[i]);
+    auto out = as::output_param{{}, as::relative{as::literal{i}}};
+    module->context->text.push_back(
+        as::instruction{as::add{{zero, param, out}}});
+  }
   // Store the output address.
   auto output_label = module->context->label("return");
   {
     const auto output_address =
         as::input_param{{}, as::immediate{as::name{output_label}}};
-    const auto out =
-        as::output_param{{}, as::relative{as::literal{start + n}}};
+    const auto out = as::output_param{{}, as::relative{as::literal{n}}};
     module->context->text.push_back(
         as::instruction{as::add{{zero, output_address, out}}});
   }
@@ -492,20 +516,22 @@ as::input_param function_context::gen_expr(const call& c) {
   {
     const auto return_address =
         as::input_param{{}, as::immediate{as::name{return_label}}};
-    const auto out =
-        as::output_param{{}, as::relative{as::literal{start + n + 1}}};
+    const auto out = as::output_param{{}, as::relative{as::literal{n + 1}}};
     module->context->text.push_back(
         as::instruction{as::add{{zero, return_address, out}}});
   }
+  // Revert the relative base.
+  auto args2 = module->context->label("revertargs");
+  module->context->text.push_back(as::instruction{
+      as::mul{{{{}, as::address{as::name{args}}},
+               {{}, as::immediate{as::literal{-1}}},
+               {{}, as::address{as::name{args2}}}}}});
+  module->context->text.push_back(as::instruction{
+      as::adjust_relative_base{{args2, as::immediate{as::literal{0}}}}});
   // Jump into the function.
-  const int frame_size = start + n + 2;
-  module->context->text.push_back(
-      as::adjust_relative_base{{{}, as::immediate{as::literal{frame_size}}}});
   module->context->text.push_back(
       as::instruction{as::jump_if_false{{zero, callee}}});
   module->context->text.push_back(as::label{return_label});
-  module->context->text.push_back(as::adjust_relative_base{
-      {{}, as::immediate{as::literal{-frame_size}}}});
   return as::input_param{output_label, as::immediate{as::literal{0}}};
 }
 
@@ -770,8 +796,8 @@ void function_context::gen_stmt(const return_statement& r) {
   // Store the return value at the output address.
   auto output_label = module->context->label("output");
   const auto zero = as::input_param{{}, as::immediate{as::literal{0}}};
-  const auto output_address =
-      as::input_param{{}, as::relative{as::literal{-2}}};
+  const auto output_address = as::input_param{
+      {}, as::address{as::name{"func_" + function_name + "_output"}}};
   const auto temp = as::output_param{{}, as::address{as::name{output_label}}};
   module->context->text.push_back(
       as::instruction{as::add{{zero, output_address, temp}}});
@@ -781,8 +807,8 @@ void function_context::gen_stmt(const return_statement& r) {
   module->context->text.push_back(
       as::instruction{as::add{{zero, value, output}}});
   // Return to the caller.
-  const auto return_address =
-      as::input_param{{}, as::relative{as::literal{-1}}};
+  const auto return_address = as::input_param{
+      {}, as::address{as::name{"func_" + function_name + "_return"}}};
   module->context->text.push_back(
       as::instruction{as::jump_if_false{{zero, return_address}}});
 }

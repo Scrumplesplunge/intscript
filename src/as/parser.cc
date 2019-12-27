@@ -76,7 +76,7 @@ struct parser {
     skip_whitespace();
     auto i = std::find_if(
         source.data(), source.data() + source.size(),
-        [](char c) { return !std::isalnum(c); });
+        [](char c) { return !(std::isalnum(c) || c == '_'); });
     name output{std::string{source.substr(0, i - source.data())}};
     if (output.value.empty()) die("Expected name.");
     if (std::isdigit(output.value[0])) die("Names cannot start with numbers.");
